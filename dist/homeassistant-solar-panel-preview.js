@@ -27,6 +27,17 @@
    * SPDX-License-Identifier: BSD-3-Clause
    */var l,o;class s extends u$1{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0;}createRenderRoot(){var t,e;const i=super.createRenderRoot();return null!==(t=(e=this.renderOptions).renderBefore)&&void 0!==t||(e.renderBefore=i.firstChild),i}update(t){const i=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(t),this._$Do=D(i,this.renderRoot,this.renderOptions);}connectedCallback(){var t;super.connectedCallback(),null===(t=this._$Do)||void 0===t||t.setConnected(!0);}disconnectedCallback(){var t;super.disconnectedCallback(),null===(t=this._$Do)||void 0===t||t.setConnected(!1);}render(){return T}}s.finalized=!0,s._$litElement$=!0,null===(l=globalThis.litElementHydrateSupport)||void 0===l||l.call(globalThis,{LitElement:s});const n=globalThis.litElementPolyfillSupport;null==n||n({LitElement:s});(null!==(o=globalThis.litElementVersions)&&void 0!==o?o:globalThis.litElementVersions=[]).push("3.3.3");
 
+  // Capture the script's base URL at load time so we can resolve
+  // co-located assets (images) regardless of the install method
+  // (HACS → /hacsfiles/…  or local → /local/…).
+  const CARD_BASE_URL = (() => {
+      const src = document.currentScript?.src;
+      if (src) {
+          return src.substring(0, src.lastIndexOf('/') + 1);
+      }
+      // Fallback for local installs where currentScript may be null
+      return '/local/';
+  })();
   // default values used throughout the card
   const DEFAULT_GRID_SIZE = 10;
   const DEFAULT_PANEL_WIDTH = 80; // px, 1:1.8 aspect ratio
@@ -86,7 +97,7 @@
           this.panels = new Map();
           this.draggedPanel = null;
           this.dragOffset = { x: 0, y: 0 };
-          this.panelImage = 'solar-panel-frame.png?v=1';
+          this.panelImage = CARD_BASE_URL + 'solar-panel-frame.png';
           this.containerWidth = DEFAULT_CONTAINER_WIDTH;
           this.containerHeight = DEFAULT_CONTAINER_HEIGHT;
           this.gridSize = DEFAULT_GRID_SIZE;

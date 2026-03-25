@@ -17,6 +17,18 @@ interface SolarPanelGridCardConfig {
   panel_height?: number;
 }
 
+// Capture the script's base URL at load time so we can resolve
+// co-located assets (images) regardless of the install method
+// (HACS → /hacsfiles/…  or local → /local/…).
+const CARD_BASE_URL = (() => {
+  const src = (document.currentScript as HTMLScriptElement | null)?.src;
+  if (src) {
+    return src.substring(0, src.lastIndexOf('/') + 1);
+  }
+  // Fallback for local installs where currentScript may be null
+  return '/local/';
+})();
+
 // default values used throughout the card
 const DEFAULT_GRID_SIZE = 10;
 const DEFAULT_PANEL_WIDTH = 80;          // px, 1:1.8 aspect ratio
@@ -104,7 +116,7 @@ export class SolarPanelGridCard extends LitElement {
   > = new Map();
   private draggedPanel: string | null = null;
   private dragOffset = { x: 0, y: 0 };
-  private panelImage: string = 'solar-panel-frame.png?v=1';
+  private panelImage: string = CARD_BASE_URL + 'solar-panel-frame.png';
   private containerWidth = DEFAULT_CONTAINER_WIDTH;
   private containerHeight = DEFAULT_CONTAINER_HEIGHT;
   private gridSize = DEFAULT_GRID_SIZE;
