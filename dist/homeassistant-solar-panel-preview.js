@@ -86,7 +86,7 @@
           this.panels = new Map();
           this.draggedPanel = null;
           this.dragOffset = { x: 0, y: 0 };
-          this.panelImage = '/local/solar-panel-frame.png?v=1';
+          this.panelImage = 'solar-panel-frame.png?v=1';
           this.containerWidth = DEFAULT_CONTAINER_WIDTH;
           this.containerHeight = DEFAULT_CONTAINER_HEIGHT;
           this.gridSize = DEFAULT_GRID_SIZE;
@@ -423,6 +423,7 @@
               // Also try to modify .content if found
               const contentEl = document.querySelector('.content');
               if (contentEl) {
+                  // TypeScript doesn’t know this is an HTMLElement
                   contentEl.style.cssText = 'max-width: none !important; width: 100% !important;';
                   // modified .content styles
               }

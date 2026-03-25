@@ -104,7 +104,7 @@ export class SolarPanelGridCard extends LitElement {
   > = new Map();
   private draggedPanel: string | null = null;
   private dragOffset = { x: 0, y: 0 };
-  private panelImage: string = '/local/solar-panel-frame.png?v=1';
+  private panelImage: string = 'solar-panel-frame.png?v=1';
   private containerWidth = DEFAULT_CONTAINER_WIDTH;
   private containerHeight = DEFAULT_CONTAINER_HEIGHT;
   private gridSize = DEFAULT_GRID_SIZE;
