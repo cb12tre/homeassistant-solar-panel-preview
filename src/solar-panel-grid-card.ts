@@ -503,11 +503,46 @@ export class SolarPanelGridCard extends LitElement {
     return panelConfig.name ? panelConfig.name : entityId.slice(-4);
   }
 
+  /**
+   * Compute the container size based on panel positions.
+   * In editor preview mode, use a large workspace so panels can be placed freely.
+   * In dashboard mode, fit tightly around the panels (with padding).
+   */
+  private getContainerSize(): { width: number; height: number } {
+    const PADDING = 20; // px padding around content
+
+    if (this.isEditorPreview) {
+      // In editor, use a large workspace for layout building
+      return { width: this.containerWidth, height: this.containerHeight };
+    }
+
+    // Calculate bounding box of all panels
+    let maxX = 0;
+    let maxY = 0;
+    this.panels.forEach((panel) => {
+      const right = panel.config.x + this.panelWidth;
+      const bottom = panel.config.y + this.panelHeight;
+      if (right > maxX) maxX = right;
+      if (bottom > maxY) maxY = bottom;
+    });
+
+    // If no panels, use a minimal size
+    if (maxX === 0 && maxY === 0) {
+      return { width: 200, height: 200 };
+    }
+
+    return {
+      width: maxX + PADDING,
+      height: maxY + PADDING,
+    };
+  }
+
   render() {
+    const size = this.getContainerSize();
     return html`
       <ha-card>
         <div class="card-content">
-          <div class="solar-grid-container">
+          <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;">
             ${Array.from(this.panels.entries()).map(
               ([entityId, panel]) => html`
                 <div
@@ -556,13 +591,10 @@ export class SolarPanelGridCard extends LitElement {
     .card-content {
       padding: 16px;
       overflow: auto;
-      height: 900px;
     }
 
     .solar-grid-container {
       position: relative;
-      width: 1400px;
-      height: 1400px;
       background: transparent;
       border: 1px solid var(--divider-color);
       cursor: default;
