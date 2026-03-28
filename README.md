@@ -4,16 +4,22 @@ A custom Home Assistant Lovelace card for displaying solar panels in an interact
 
 ## Features
 
-- **Grid Layout**: Display multiple solar panels in a flexible grid (1400×1400px workspace)
+- **Grid Layout**: Display multiple solar panels in a flexible grid with auto-sizing canvas
 - **Drag & Drop**: Move panels freely around the canvas with smooth snapping (available when the dashboard is in edit mode or in the card editor preview)
 - **Snap-to-Grid**: Panels snap to a configurable grid for neat alignment
 - **Live Data**: Real-time display of current production values from sensor entities
+- **Power / Energy Toggle**: Switch between instantaneous power (W) and daily energy (kWh) views with a slide toggle — configure a secondary energy entity per panel
+- **Per-Panel Rotation**: Rotate individual panels to match your physical roof layout
+- **Canvas Rotation**: Rotate the entire grid to orient the installation according to compass direction
+- **Background Image**: Overlay panels on a roof photo or plan for accurate positioning
 - **Panel Naming**: Optional `name` property on each panel used for the label; falls back to the last 4 characters of the entity ID if unspecified
 - **Color Visualization**: Background color gradient indicates production level
   - Black (0%) → Dark Blue (Hue 240°) → Light Blue (Hue 180°) at 100%
   - Automatically scales based on unit type (kWh for daily energy, W for instantaneous power)
+- **Auto-Sizing Canvas**: In dashboard view the card fits tightly around your panels — no unnecessary scrollbars. In the editor preview the workspace stays large for layout building.
 - **Full-Width Canvas**: Automatically expands card to viewport width for maximum workspace
 - **Collapsible Panel UI**: Configuration panel headers collapse/expand to manage 30+ panels efficiently
+- **Card Picker**: Shows up in the Home Assistant "Add Card" dialog for easy discovery. If your array is large it's recommended not to use a full dashboard view instead of a card.
 - **Configuration UI**: Drag-and-drop editor preview with schema-driven grid settings and panel-level configurations
 
 ## Preview
@@ -96,14 +102,20 @@ type: custom:solar-panel-grid-card
 grid_size: 10              # Grid snap size in pixels (default: 10)
 panel_width: 80            # Panel width in pixels (default: 80)
 panel_height: 144          # Panel height in pixels (default: 144, 1:1.8 aspect ratio)
+canvas_rotation: -30       # Rotate the entire layout (degrees, clockwise)
+background_image: /local/roof-plan.png   # Optional roof photo/plan
+background_opacity: 0.4   # Background image opacity (0–1)
 panels:
   - entity: sensor.solar_inverter_1
+    entity_energy: sensor.solar_inverter_1_energy_today  # Optional energy entity
     name: "A1"            # optional display name (defaults to last 4 of entity if omitted)
     x: 0
     y: 0
+    rotation: 90           # per-panel rotation (degrees, clockwise)
     max_daily_production: 5.5  # Maximum daily production in kWh
     max_production: 400        # Maximum instantaneous power in W
   - entity: sensor.solar_inverter_2
+    entity_energy: sensor.solar_inverter_2_energy_today
     # no name specified, will fall back to entity suffix
     x: 85
     y: 0
@@ -121,15 +133,20 @@ panels:
 | `grid_size` | number | 10 | Snap-to-grid size in pixels |
 | `panel_width` | number | 80 | Width of each panel in pixels |
 | `panel_height` | number | 144 | Height of each panel in pixels (1:1.8 aspect ratio) |
+| `canvas_rotation` | number | 0 | Rotate the entire grid layout in degrees (-180 to 180) |
+| `background_image` | string | — | URL to a background image (e.g. `/local/roof-plan.png`) |
+| `background_opacity` | number | 0.4 | Opacity of the background image (0–1) |
 | `panels` | array | Required | List of solar panel configurations |
 
 #### Panel-Level Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `entity` | string | Required | Power or energy sensor entity ID (e.g., `sensor.solar_inverter_1`). Filtered selector only shows entities with `device_class: power` or `device_class: energy` |
+| `entity` | string | Required | Power sensor entity ID. Editor dropdown shows entities with `device_class: power` |
+| `entity_energy` | string | — | Energy sensor entity ID for dual-view (kWh toggle). Editor dropdown shows entities with `device_class: energy` |
 | `x` | number | 0 | Horizontal position in pixels |
 | `y` | number | 0 | Vertical position in pixels |
+| `rotation` | number | 0 | Panel rotation in degrees (-180 to 180, clockwise) |
 | `name` | string | (last 4 of entity) | Optional panel display name; defaults to the last four characters of the entity ID |
 | `max_daily_production` | number | 5.5 | Maximum daily production in kWh (used for `kWh` and `Wh` units) |
 | `max_production` | number | 400 | Maximum instantaneous power in W (used for `W` units) |
@@ -142,7 +159,8 @@ Each panel displays:
 - **Background Color**: Indicates production level based on current vs. maximum value
 - **Panel Image**: Visual representation of the solar panel
 - **Production Value**: Current production displayed in center with unit of measurement
-- **Entity ID Suffix**: Last 4 characters of entity ID at bottom-right corner for quick identification
+- **Entity ID Suffix**: Last 4 characters of entity ID (or custom `name`) at bottom-right corner for quick identification
+- **W / kWh Toggle**: When energy entities are configured, a slide toggle in the top-right corner switches the entire card between power and energy views
 
 ### Color Gradient
 

@@ -3,9 +3,11 @@ import { PANEL_IMAGE_DATA_URI } from './panel-image';
 
 interface SolarPanelConfig {
   entity: string;
+  entity_energy?: string;      // secondary entity for energy (kWh)
   x: number;
   y: number;
   name?: string;              // optional display name (defaults to last 4 chars of entity_id)
+  rotation?: number;           // degrees, clockwise
   max_daily_production?: number; // kWh
   max_production?: number; // W
 }
@@ -16,6 +18,9 @@ interface SolarPanelGridCardConfig {
   grid_size?: number; // pixels for snap-to-grid
   panel_width?: number;
   panel_height?: number;
+  canvas_rotation?: number;    // degrees, clockwise
+  background_image?: string;
+  background_opacity?: number;
 }
 
 // default values used throughout the card
@@ -93,15 +98,17 @@ export class SolarPanelGridCard extends LitElement {
     return {
       hass: { type: Object },
       config: { type: Object },
+      _showEnergy: { state: true },
     };
   }
 
   hass!: Hass;
   config!: SolarPanelGridCardConfig;
+  private _showEnergy = false;
   
   private panels: Map<
     string,
-    { config: SolarPanelConfig; entity?: HassEntity }
+    { config: SolarPanelConfig; entity?: HassEntity; entityEnergy?: HassEntity }
   > = new Map();
   private draggedPanel: string | null = null;
   private dragOffset = { x: 0, y: 0 };
@@ -210,6 +217,7 @@ export class SolarPanelGridCard extends LitElement {
           this.panels.set(panelConfig.entity, {
             config: panelConfig,
             entity: this.hass?.states[panelConfig.entity],
+            entityEnergy: panelConfig.entity_energy ? this.hass?.states[panelConfig.entity_energy] : undefined,
           });
         });
       }
@@ -219,6 +227,9 @@ export class SolarPanelGridCard extends LitElement {
       // Update just the entity references when hass updates
       this.panels.forEach((panel, entity) => {
         panel.entity = this.hass.states[entity];
+        if (panel.config.entity_energy) {
+          panel.entityEnergy = this.hass.states[panel.config.entity_energy];
+        }
       });
     }
   }
@@ -284,10 +295,16 @@ export class SolarPanelGridCard extends LitElement {
       return;
     }
 
+    // In energy view, open the energy entity's info dialog if available
+    const panel = this.panels.get(entityId);
+    const clickEntityId = (this._showEnergy && panel?.config.entity_energy)
+      ? panel.config.entity_energy
+      : entityId;
+
     const event = new CustomEvent('hass-more-info', {
       bubbles: true,
       composed: true,
-      detail: { entityId },
+      detail: { entityId: clickEntityId },
     });
     this.dispatchEvent(event);
   }
@@ -503,6 +520,23 @@ export class SolarPanelGridCard extends LitElement {
     return panelConfig.name ? panelConfig.name : entityId.slice(-4);
   }
 
+  private getRotatedBounds(w: number, h: number, angleDeg: number): { width: number; height: number } {
+    if (!angleDeg) return { width: w, height: h };
+    const rad = Math.abs(angleDeg) * Math.PI / 180;
+    return {
+      width: Math.ceil(w * Math.cos(rad) + h * Math.sin(rad)),
+      height: Math.ceil(w * Math.sin(rad) + h * Math.cos(rad)),
+    };
+  }
+
+  private _hasEnergyEntities(): boolean {
+    return Array.from(this.panels.values()).some((p) => !!p.config.entity_energy);
+  }
+
+  private _toggleView = () => {
+    this._showEnergy = !this._showEnergy;
+  };
+
   /**
    * Compute the container size based on panel positions.
    * In editor preview mode, use a large workspace so panels can be placed freely.
@@ -539,43 +573,67 @@ export class SolarPanelGridCard extends LitElement {
 
   render() {
     const size = this.getContainerSize();
+    const canvasRotation = this.config.canvas_rotation || 0;
+    const rotatedSize = this.getRotatedBounds(size.width, size.height, canvasRotation);
+    const bgImage = this.config.background_image || '';
+    const bgOpacity = this.config.background_opacity ?? 0.4;
+    const hasEnergy = this._hasEnergyEntities();
+
     return html`
       <ha-card>
         <div class="card-content">
-          <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;">
-            ${Array.from(this.panels.entries()).map(
-              ([entityId, panel]) => html`
-                <div
-                  class="solar-panel"
-                  style="left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;"
-                  @click="${(e: MouseEvent) => this.onPanelClick(e, entityId)}"
-                  @mousedown="${(e: MouseEvent) => this.onPanelMouseDown(e, entityId)}"
-                >
-                  <div
-                    class="panel-background"
-                    style="background-color: ${this.getProductionColor(
-                      this.getProductionValue(panel.entity),
-                      this.getMaxValue(
-                        panel.config,
-                        panel.entity?.attributes.unit_of_measurement || 'W'
-                      )
-                    )}"
-                  ></div>
-                  <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
-                  <div class="panel-overlay">
-                    <div class="panel-value">
-                      ${panel.entity
-                        ? html`
-                            <span class="value">${this.getProductionValue(panel.entity).toFixed(1)}</span>
-                            <span class="unit">${panel.entity.attributes.unit_of_measurement || ''}</span>
-                          `
-                        : html`<span class="error">N/A</span>`}
+          ${hasEnergy ? html`
+            <div class="view-toggle" @click="${this._toggleView}" title="Toggle between power and energy view">
+              <span class="toggle-label ${!this._showEnergy ? 'active' : ''}">W</span>
+              <div class="toggle-track ${this._showEnergy ? 'on' : ''}">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
+            </div>
+          ` : ''}
+          <div class="canvas-wrapper" style="width: ${rotatedSize.width}px; height: ${rotatedSize.height}px;">
+            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;${canvasRotation ? ` transform: rotate(${canvasRotation}deg);` : ''}">
+              ${bgImage ? html`
+                <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
+              ` : ''}
+              ${Array.from(this.panels.entries()).map(
+                ([entityId, panel]) => {
+                  const rotation = panel.config.rotation || 0;
+                  const activeEntity = (this._showEnergy && panel.entityEnergy) ? panel.entityEnergy : panel.entity;
+                  return html`
+                    <div
+                      class="solar-panel"
+                      style="left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;${rotation ? ` transform: rotate(${rotation}deg);` : ''}"
+                      @click="${(e: MouseEvent) => this.onPanelClick(e, entityId)}"
+                      @mousedown="${(e: MouseEvent) => this.onPanelMouseDown(e, entityId)}"
+                    >
+                      <div
+                        class="panel-background"
+                        style="background-color: ${this.getProductionColor(
+                          this.getProductionValue(activeEntity),
+                          this.getMaxValue(
+                            panel.config,
+                            activeEntity?.attributes.unit_of_measurement || 'W'
+                          )
+                        )}"
+                      ></div>
+                      <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
+                      <div class="panel-overlay">
+                        <div class="panel-value">
+                          ${activeEntity
+                            ? html`
+                                <span class="value">${this.getProductionValue(activeEntity).toFixed(1)}</span>
+                                <span class="unit">${activeEntity.attributes.unit_of_measurement || ''}</span>
+                              `
+                            : html`<span class="error">N/A</span>`}
+                        </div>
+                        <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
+                      </div>
                     </div>
-                    <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
-                  </div>
-                </div>
-              `
-            )}
+                  `;
+                }
+              )}
+            </div>
           </div>
         </div>
       </ha-card>
@@ -586,11 +644,20 @@ export class SolarPanelGridCard extends LitElement {
     ha-card {
       height: 100%;
       width: 100%;
+      position: relative;
     }
 
     .card-content {
       padding: 16px;
       overflow: auto;
+      position: relative;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .solar-grid-container {
@@ -599,6 +666,80 @@ export class SolarPanelGridCard extends LitElement {
       border: 1px solid var(--divider-color);
       cursor: default;
       user-select: none;
+      transform-origin: center center;
+    }
+
+    .background-image {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      object-fit: cover;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .view-toggle {
+      position: sticky;
+      top: 0;
+      float: right;
+      z-index: 10;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 20px;
+      padding: 4px 10px;
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 8px;
+    }
+
+    .view-toggle:hover {
+      border-color: var(--primary-color, #03a9f4);
+    }
+
+    .toggle-label {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--secondary-text-color, #888);
+      transition: color 0.2s, font-weight 0.2s;
+    }
+
+    .toggle-label.active {
+      font-weight: 700;
+      color: var(--primary-text-color, #333);
+    }
+
+    .toggle-track {
+      position: relative;
+      width: 32px;
+      height: 16px;
+      border-radius: 8px;
+      background: var(--disabled-color, #bdbdbd);
+      transition: background 0.25s;
+    }
+
+    .toggle-track.on {
+      background: var(--primary-color, #03a9f4);
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: left 0.25s;
+    }
+
+    .toggle-track.on .toggle-thumb {
+      left: 18px;
     }
 
     /* show grab cursor when inside editor preview */
@@ -612,6 +753,7 @@ export class SolarPanelGridCard extends LitElement {
       overflow: hidden;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       pointer-events: auto;
+      transform-origin: center center;
     }
 
     

@@ -85,6 +85,7 @@
   class SolarPanelGridCard extends s {
       constructor() {
           super(...arguments);
+          this._showEnergy = false;
           this.panels = new Map();
           this.draggedPanel = null;
           this.dragOffset = { x: 0, y: 0 };
@@ -150,11 +151,15 @@
               });
               this.dispatchEvent(event);
           };
+          this._toggleView = () => {
+              this._showEnergy = !this._showEnergy;
+          };
       }
       static get properties() {
           return {
               hass: { type: Object },
               config: { type: Object },
+              _showEnergy: { state: true },
           };
       }
       // Determine whether this card is being rendered inside the editor's
@@ -244,6 +249,7 @@
                       this.panels.set(panelConfig.entity, {
                           config: panelConfig,
                           entity: this.hass?.states[panelConfig.entity],
+                          entityEnergy: panelConfig.entity_energy ? this.hass?.states[panelConfig.entity_energy] : undefined,
                       });
                   });
               }
@@ -252,6 +258,9 @@
               // Update just the entity references when hass updates
               this.panels.forEach((panel, entity) => {
                   panel.entity = this.hass.states[entity];
+                  if (panel.config.entity_energy) {
+                      panel.entityEnergy = this.hass.states[panel.config.entity_energy];
+                  }
               });
           }
       }
@@ -304,10 +313,15 @@
           if (this.draggedPanel === entityId) {
               return;
           }
+          // In energy view, open the energy entity's info dialog if available
+          const panel = this.panels.get(entityId);
+          const clickEntityId = (this._showEnergy && panel?.config.entity_energy)
+              ? panel.config.entity_energy
+              : entityId;
           const event = new CustomEvent('hass-more-info', {
               bubbles: true,
               composed: true,
-              detail: { entityId },
+              detail: { entityId: clickEntityId },
           });
           this.dispatchEvent(event);
       }
@@ -439,6 +453,18 @@
           // prefer user-specified name, fallback to last 4 chars of the entity id
           return panelConfig.name ? panelConfig.name : entityId.slice(-4);
       }
+      getRotatedBounds(w, h, angleDeg) {
+          if (!angleDeg)
+              return { width: w, height: h };
+          const rad = Math.abs(angleDeg) * Math.PI / 180;
+          return {
+              width: Math.ceil(w * Math.cos(rad) + h * Math.sin(rad)),
+              height: Math.ceil(w * Math.sin(rad) + h * Math.cos(rad)),
+          };
+      }
+      _hasEnergyEntities() {
+          return Array.from(this.panels.values()).some((p) => !!p.config.entity_energy);
+      }
       /**
        * Compute the container size based on panel positions.
        * In editor preview mode, use a large workspace so panels can be placed freely.
@@ -472,35 +498,58 @@
       }
       render() {
           const size = this.getContainerSize();
+          const canvasRotation = this.config.canvas_rotation || 0;
+          const rotatedSize = this.getRotatedBounds(size.width, size.height, canvasRotation);
+          const bgImage = this.config.background_image || '';
+          const bgOpacity = this.config.background_opacity ?? 0.4;
+          const hasEnergy = this._hasEnergyEntities();
           return x `
       <ha-card>
         <div class="card-content">
-          <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;">
-            ${Array.from(this.panels.entries()).map(([entityId, panel]) => x `
-                <div
-                  class="solar-panel"
-                  style="left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;"
-                  @click="${(e) => this.onPanelClick(e, entityId)}"
-                  @mousedown="${(e) => this.onPanelMouseDown(e, entityId)}"
-                >
-                  <div
-                    class="panel-background"
-                    style="background-color: ${this.getProductionColor(this.getProductionValue(panel.entity), this.getMaxValue(panel.config, panel.entity?.attributes.unit_of_measurement || 'W'))}"
-                  ></div>
-                  <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
-                  <div class="panel-overlay">
-                    <div class="panel-value">
-                      ${panel.entity
-            ? x `
-                            <span class="value">${this.getProductionValue(panel.entity).toFixed(1)}</span>
-                            <span class="unit">${panel.entity.attributes.unit_of_measurement || ''}</span>
-                          `
-            : x `<span class="error">N/A</span>`}
+          ${hasEnergy ? x `
+            <div class="view-toggle" @click="${this._toggleView}" title="Toggle between power and energy view">
+              <span class="toggle-label ${!this._showEnergy ? 'active' : ''}">W</span>
+              <div class="toggle-track ${this._showEnergy ? 'on' : ''}">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
+            </div>
+          ` : ''}
+          <div class="canvas-wrapper" style="width: ${rotatedSize.width}px; height: ${rotatedSize.height}px;">
+            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;${canvasRotation ? ` transform: rotate(${canvasRotation}deg);` : ''}">
+              ${bgImage ? x `
+                <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
+              ` : ''}
+              ${Array.from(this.panels.entries()).map(([entityId, panel]) => {
+            const rotation = panel.config.rotation || 0;
+            const activeEntity = (this._showEnergy && panel.entityEnergy) ? panel.entityEnergy : panel.entity;
+            return x `
+                    <div
+                      class="solar-panel"
+                      style="left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;${rotation ? ` transform: rotate(${rotation}deg);` : ''}"
+                      @click="${(e) => this.onPanelClick(e, entityId)}"
+                      @mousedown="${(e) => this.onPanelMouseDown(e, entityId)}"
+                    >
+                      <div
+                        class="panel-background"
+                        style="background-color: ${this.getProductionColor(this.getProductionValue(activeEntity), this.getMaxValue(panel.config, activeEntity?.attributes.unit_of_measurement || 'W'))}"
+                      ></div>
+                      <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
+                      <div class="panel-overlay">
+                        <div class="panel-value">
+                          ${activeEntity
+                ? x `
+                                <span class="value">${this.getProductionValue(activeEntity).toFixed(1)}</span>
+                                <span class="unit">${activeEntity.attributes.unit_of_measurement || ''}</span>
+                              `
+                : x `<span class="error">N/A</span>`}
+                        </div>
+                        <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
+                      </div>
                     </div>
-                    <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
-                  </div>
-                </div>
-              `)}
+                  `;
+        })}
+            </div>
           </div>
         </div>
       </ha-card>
@@ -511,11 +560,20 @@
     ha-card {
       height: 100%;
       width: 100%;
+      position: relative;
     }
 
     .card-content {
       padding: 16px;
       overflow: auto;
+      position: relative;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .solar-grid-container {
@@ -524,6 +582,80 @@
       border: 1px solid var(--divider-color);
       cursor: default;
       user-select: none;
+      transform-origin: center center;
+    }
+
+    .background-image {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      object-fit: cover;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .view-toggle {
+      position: sticky;
+      top: 0;
+      float: right;
+      z-index: 10;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 20px;
+      padding: 4px 10px;
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 8px;
+    }
+
+    .view-toggle:hover {
+      border-color: var(--primary-color, #03a9f4);
+    }
+
+    .toggle-label {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--secondary-text-color, #888);
+      transition: color 0.2s, font-weight 0.2s;
+    }
+
+    .toggle-label.active {
+      font-weight: 700;
+      color: var(--primary-text-color, #333);
+    }
+
+    .toggle-track {
+      position: relative;
+      width: 32px;
+      height: 16px;
+      border-radius: 8px;
+      background: var(--disabled-color, #bdbdbd);
+      transition: background 0.25s;
+    }
+
+    .toggle-track.on {
+      background: var(--primary-color, #03a9f4);
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: left 0.25s;
+    }
+
+    .toggle-track.on .toggle-thumb {
+      left: 18px;
     }
 
     /* show grab cursor when inside editor preview */
@@ -537,6 +669,7 @@
       overflow: hidden;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       pointer-events: auto;
+      transform-origin: center center;
     }
 
     
@@ -635,6 +768,7 @@
                   grid_size: 'Grid Size (px)',
                   panel_width: 'Panel Width (px)',
                   panel_height: 'Panel Height (px)',
+                  canvas_rotation: 'Canvas Rotation (°)',
               };
               return labels[schema.name] || schema.name;
           };
@@ -699,12 +833,13 @@
           };
           this._onPanelEntityChanged = (e) => {
               const panelIndex = parseInt(e.target.getAttribute('data-index') || '0', 10);
+              const configValue = e.target.getAttribute('data-config-value') || 'entity';
               const newEntity = e.target.value;
               if (!this.config.panels || panelIndex === undefined)
                   return;
               const updatedPanels = this.config.panels.map((panel, idx) => {
                   if (idx === panelIndex) {
-                      return { ...panel, entity: newEntity };
+                      return { ...panel, [configValue]: newEntity };
                   }
                   return panel;
               });
@@ -759,22 +894,35 @@
                   return [];
               return Object.keys(this.hass.states)
                   .filter((entityId) => {
-                  // Only include sensor entities
                   if (!entityId.startsWith('sensor.'))
                       return false;
                   const entity = this.hass.states[entityId];
-                  // Check if device_class is 'power' or 'energy'
                   const deviceClass = entity?.attributes?.device_class;
-                  return deviceClass === 'power' || deviceClass === 'energy';
+                  return deviceClass === 'power';
+              })
+                  .sort();
+          };
+          this._getEnergySensorEntities = () => {
+              if (!this.hass)
+                  return [];
+              return Object.keys(this.hass.states)
+                  .filter((entityId) => {
+                  if (!entityId.startsWith('sensor.'))
+                      return false;
+                  const entity = this.hass.states[entityId];
+                  const deviceClass = entity?.attributes?.device_class;
+                  return deviceClass === 'energy';
               })
                   .sort();
           };
           this._addPanel = () => {
               const newPanel = {
                   entity: 'sensor.',
+                  entity_energy: '',
                   name: '',
                   x: 0,
                   y: 0,
+                  rotation: 0,
                   max_production: 400,
                   max_daily_production: 5.5,
               };
@@ -856,7 +1004,7 @@
                               ></ha-textfield>
                             </div>
                             <div class="config-row">
-                              <label for="entity-${idx}">Entity:</label>
+                              <label for="entity-${idx}">Power Entity:</label>
                               <select
                                 id="entity-${idx}"
                                 .value="${panel.entity || ''}"
@@ -865,9 +1013,40 @@
                                 @change="${this._onPanelEntityChanged}"
                                 class="entity-select"
                               >
-                                <option value="">Select a sensor...</option>
-                                ${this._getPowerSensorEntities().map((entityId) => x `<option value="${entityId}">${entityId}</option>`)}
+                                <option value="">Select a power sensor...</option>
+                                ${this._getPowerSensorEntities().map((entityId) => x `<option value="${entityId}" ?selected="${entityId === panel.entity}">${entityId}</option>`)}
                               </select>
+                            </div>
+                            <div class="config-row">
+                              <label for="entity-energy-${idx}">Energy Entity:</label>
+                              <select
+                                id="entity-energy-${idx}"
+                                .value="${panel.entity_energy || ''}"
+                                data-config-value="entity_energy"
+                                data-index="${idx}"
+                                @change="${this._onPanelEntityChanged}"
+                                class="entity-select"
+                              >
+                                <option value="">Select an energy sensor...</option>
+                                ${this._getEnergySensorEntities().map((entityId) => x `<option value="${entityId}" ?selected="${entityId === panel.entity_energy}">${entityId}</option>`)}
+                              </select>
+                            </div>
+                            <div class="config-row">
+                              <label>Rotation (\u00b0):</label>
+                              <div class="slider-row">
+                                <input
+                                  type="range"
+                                  min="-180"
+                                  max="180"
+                                  step="5"
+                                  .value="${String(panel.rotation || 0)}"
+                                  data-config-value="rotation"
+                                  data-index="${idx}"
+                                  @input="${this._onPanelPropertyChanged}"
+                                  class="rotation-slider"
+                                />
+                                <span class="slider-value">${panel.rotation || 0}°</span>
+                              </div>
                             </div>
                             <div class="config-row">
                               <label>Max Production (W):</label>
@@ -918,7 +1097,7 @@
             ? this.config.panels.map((panel) => x `
                   <div class="panel-item">
                     <span>${panel.name || panel.entity}</span>
-                    <span class="position"> @ (${panel.x}, ${panel.y})</span>
+                    <span class="position"> @ (${panel.x}, ${panel.y})${panel.rotation ? ` ↻${panel.rotation}°` : ''}</span>
                   </div>
                 `)
             : x `<p class="no-panels">No panels configured</p>`}
@@ -963,6 +1142,18 @@
                           max: 300,
                           step: 1,
                           unit_of_measurement: 'px',
+                      },
+                  },
+              },
+              {
+                  name: 'canvas_rotation',
+                  required: false,
+                  selector: {
+                      number: {
+                          min: -180,
+                          max: 180,
+                          step: 1,
+                          unit_of_measurement: '°',
                       },
                   },
               },
@@ -1070,6 +1261,45 @@
         flex: 1;
         max-width: 150px;
       }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+      .rotation-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--disabled-color, #bdbdbd);
+        outline: none;
+        cursor: pointer;
+      }
+      .rotation-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color, #03a9f4);
+        cursor: pointer;
+      }
+      .rotation-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color, #03a9f4);
+        border: none;
+        cursor: pointer;
+      }
+      .slider-value {
+        min-width: 40px;
+        text-align: right;
+        font-size: 12px;
+        color: var(--primary-text-color);
+      }
       .entity-select {
         flex: 1;
         padding: 8px 12px;
@@ -1136,6 +1366,17 @@
   }
   // Register the custom element
   customElements.define('solar-panel-grid-card-editor', SolarPanelGridCardEditor);
+
+  // Main entry point for the Solar Panel Grid Card
+  // Register with Home Assistant's card picker
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+      type: 'solar-panel-grid-card',
+      name: 'Solar Panel Grid',
+      description: 'Visualize individual solar panel production on a draggable grid layout.',
+      preview: true,
+      documentationURL: 'https://github.com/mutilator/homeassistant-solar-panel-preview',
+  });
 
   exports.SolarPanelGridCard = SolarPanelGridCard;
   exports.SolarPanelGridCardEditor = SolarPanelGridCardEditor;

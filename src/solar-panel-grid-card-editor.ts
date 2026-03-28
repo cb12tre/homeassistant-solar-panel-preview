@@ -2,9 +2,11 @@ import { LitElement, html, css } from 'lit';
 
 interface SolarPanelConfig {
   entity: string;
+  entity_energy?: string;
   x: number;
   y: number;
   name?: string;
+  rotation?: number;
   max_daily_production?: number;
   max_production?: number;
 }
@@ -15,6 +17,9 @@ interface SolarPanelGridCardConfig {
   grid_size?: number;
   panel_width?: number;
   panel_height?: number;
+  canvas_rotation?: number;
+  background_image?: string;
+  background_opacity?: number;
 }
 
 /**
@@ -107,7 +112,7 @@ export class SolarPanelGridCardEditor extends LitElement {
                               ></ha-textfield>
                             </div>
                             <div class="config-row">
-                              <label for="entity-${idx}">Entity:</label>
+                              <label for="entity-${idx}">Power Entity:</label>
                               <select
                                 id="entity-${idx}"
                                 .value="${panel.entity || ''}"
@@ -116,11 +121,44 @@ export class SolarPanelGridCardEditor extends LitElement {
                                 @change="${this._onPanelEntityChanged}"
                                 class="entity-select"
                               >
-                                <option value="">Select a sensor...</option>
+                                <option value="">Select a power sensor...</option>
                                 ${this._getPowerSensorEntities().map((entityId: string) =>
-                                  html`<option value="${entityId}">${entityId}</option>`
+                                  html`<option value="${entityId}" ?selected="${entityId === panel.entity}">${entityId}</option>`
                                 )}
                               </select>
+                            </div>
+                            <div class="config-row">
+                              <label for="entity-energy-${idx}">Energy Entity:</label>
+                              <select
+                                id="entity-energy-${idx}"
+                                .value="${panel.entity_energy || ''}"
+                                data-config-value="entity_energy"
+                                data-index="${idx}"
+                                @change="${this._onPanelEntityChanged}"
+                                class="entity-select"
+                              >
+                                <option value="">Select an energy sensor...</option>
+                                ${this._getEnergySensorEntities().map((entityId: string) =>
+                                  html`<option value="${entityId}" ?selected="${entityId === panel.entity_energy}">${entityId}</option>`
+                                )}
+                              </select>
+                            </div>
+                            <div class="config-row">
+                              <label>Rotation (\u00b0):</label>
+                              <div class="slider-row">
+                                <input
+                                  type="range"
+                                  min="-180"
+                                  max="180"
+                                  step="5"
+                                  .value="${String(panel.rotation || 0)}"
+                                  data-config-value="rotation"
+                                  data-index="${idx}"
+                                  @input="${this._onPanelPropertyChanged}"
+                                  class="rotation-slider"
+                                />
+                                <span class="slider-value">${panel.rotation || 0}°</span>
+                              </div>
                             </div>
                             <div class="config-row">
                               <label>Max Production (W):</label>
@@ -171,7 +209,7 @@ export class SolarPanelGridCardEditor extends LitElement {
               ? this.config.panels.map((panel: any) => html`
                   <div class="panel-item">
                     <span>${panel.name || panel.entity}</span>
-                    <span class="position"> @ (${panel.x}, ${panel.y})</span>
+                    <span class="position"> @ (${panel.x}, ${panel.y})${panel.rotation ? ` ↻${panel.rotation}°` : ''}</span>
                   </div>
                 `)
               : html`<p class="no-panels">No panels configured</p>`}
@@ -220,6 +258,18 @@ export class SolarPanelGridCardEditor extends LitElement {
           },
         },
       },
+      {
+        name: 'canvas_rotation',
+        required: false,
+        selector: {
+          number: {
+            min: -180,
+            max: 180,
+            step: 1,
+            unit_of_measurement: '°',
+          },
+        },
+      },
     ];
   }
 
@@ -232,6 +282,7 @@ export class SolarPanelGridCardEditor extends LitElement {
       grid_size: 'Grid Size (px)',
       panel_width: 'Panel Width (px)',
       panel_height: 'Panel Height (px)',
+      canvas_rotation: 'Canvas Rotation (°)',
     };
     return labels[schema.name] || schema.name;
   }
@@ -317,13 +368,14 @@ export class SolarPanelGridCardEditor extends LitElement {
 
   private _onPanelEntityChanged = (e: any) => {
     const panelIndex = parseInt((e.target as HTMLElement).getAttribute('data-index') || '0', 10);
+    const configValue = (e.target as HTMLElement).getAttribute('data-config-value') || 'entity';
     const newEntity = e.target.value;
 
     if (!this.config.panels || panelIndex === undefined) return;
 
     const updatedPanels = this.config.panels.map((panel: any, idx: number) => {
       if (idx === panelIndex) {
-        return { ...panel, entity: newEntity };
+        return { ...panel, [configValue]: newEntity };
       }
       return panel;
     });
@@ -390,13 +442,23 @@ export class SolarPanelGridCardEditor extends LitElement {
     
     return Object.keys(this.hass.states)
       .filter((entityId: string) => {
-        // Only include sensor entities
         if (!entityId.startsWith('sensor.')) return false;
-        
         const entity = this.hass.states[entityId];
-        // Check if device_class is 'power' or 'energy'
         const deviceClass = entity?.attributes?.device_class;
-        return deviceClass === 'power' || deviceClass === 'energy';
+        return deviceClass === 'power';
+      })
+      .sort();
+  }
+
+  private _getEnergySensorEntities = () => {
+    if (!this.hass) return [];
+    
+    return Object.keys(this.hass.states)
+      .filter((entityId: string) => {
+        if (!entityId.startsWith('sensor.')) return false;
+        const entity = this.hass.states[entityId];
+        const deviceClass = entity?.attributes?.device_class;
+        return deviceClass === 'energy';
       })
       .sort();
   }
@@ -404,9 +466,11 @@ export class SolarPanelGridCardEditor extends LitElement {
   private _addPanel = () => {
     const newPanel = {
       entity: 'sensor.',
+      entity_energy: '',
       name: '',
       x: 0,
       y: 0,
+      rotation: 0,
       max_production: 400,
       max_daily_production: 5.5,
     };
@@ -524,6 +588,45 @@ export class SolarPanelGridCardEditor extends LitElement {
       .config-row ha-textfield {
         flex: 1;
         max-width: 150px;
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+      .rotation-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--disabled-color, #bdbdbd);
+        outline: none;
+        cursor: pointer;
+      }
+      .rotation-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color, #03a9f4);
+        cursor: pointer;
+      }
+      .rotation-slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary-color, #03a9f4);
+        border: none;
+        cursor: pointer;
+      }
+      .slider-value {
+        min-width: 40px;
+        text-align: right;
+        font-size: 12px;
+        color: var(--primary-text-color);
       }
       .entity-select {
         flex: 1;
