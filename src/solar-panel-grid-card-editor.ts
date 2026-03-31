@@ -17,6 +17,8 @@ interface SolarPanelGridCardConfig {
   grid_size?: number;
   panel_width?: number;
   panel_height?: number;
+  canvas_width?: number;
+  canvas_height?: number;
   canvas_rotation?: number;
   background_image?: string;
   background_opacity?: number;
@@ -259,6 +261,30 @@ export class SolarPanelGridCardEditor extends LitElement {
         },
       },
       {
+        name: 'canvas_width',
+        required: false,
+        selector: {
+          number: {
+            min: 100,
+            max: 4000,
+            step: 10,
+            unit_of_measurement: 'px',
+          },
+        },
+      },
+      {
+        name: 'canvas_height',
+        required: false,
+        selector: {
+          number: {
+            min: 100,
+            max: 4000,
+            step: 10,
+            unit_of_measurement: 'px',
+          },
+        },
+      },
+      {
         name: 'canvas_rotation',
         required: false,
         selector: {
@@ -282,6 +308,8 @@ export class SolarPanelGridCardEditor extends LitElement {
       grid_size: 'Grid Size (px)',
       panel_width: 'Panel Width (px)',
       panel_height: 'Panel Height (px)',
+      canvas_width: 'Canvas Width (px)',
+      canvas_height: 'Canvas Height (px)',
       canvas_rotation: 'Canvas Rotation (°)',
     };
     return labels[schema.name] || schema.name;

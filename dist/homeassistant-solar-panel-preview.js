@@ -472,6 +472,10 @@
        */
       getContainerSize() {
           const PADDING = 20; // px padding around content
+          // If explicit canvas dimensions are configured, always use them
+          if (this.config.canvas_width && this.config.canvas_height) {
+              return { width: this.config.canvas_width, height: this.config.canvas_height };
+          }
           if (this.isEditorPreview) {
               // In editor, use a large workspace for layout building
               return { width: this.containerWidth, height: this.containerHeight };
@@ -522,6 +526,7 @@
               ` : ''}
               ${Array.from(this.panels.entries()).map(([entityId, panel]) => {
             const rotation = panel.config.rotation || 0;
+            const totalRotation = rotation + canvasRotation;
             const activeEntity = (this._showEnergy && panel.entityEnergy) ? panel.entityEnergy : panel.entity;
             return x `
                     <div
@@ -536,7 +541,7 @@
                       ></div>
                       <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
                       <div class="panel-overlay">
-                        <div class="panel-value">
+                        <div class="panel-value" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">
                           ${activeEntity
                 ? x `
                                 <span class="value">${this.getProductionValue(activeEntity).toFixed(1)}</span>
@@ -544,7 +549,7 @@
                               `
                 : x `<span class="error">N/A</span>`}
                         </div>
-                        <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
+                        <div class="entity-id-suffix" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">${this.getPanelDisplayName(entityId, panel.config)}</div>
                       </div>
                     </div>
                   `;
@@ -587,11 +592,10 @@
 
     .background-image {
       position: absolute;
-      width: 100%;
-      height: 100%;
       top: 0;
       left: 0;
-      object-fit: cover;
+      object-fit: none;
+      object-position: top left;
       z-index: 0;
       pointer-events: none;
     }
@@ -768,6 +772,8 @@
                   grid_size: 'Grid Size (px)',
                   panel_width: 'Panel Width (px)',
                   panel_height: 'Panel Height (px)',
+                  canvas_width: 'Canvas Width (px)',
+                  canvas_height: 'Canvas Height (px)',
                   canvas_rotation: 'Canvas Rotation (°)',
               };
               return labels[schema.name] || schema.name;
@@ -1141,6 +1147,30 @@
                           min: 50,
                           max: 300,
                           step: 1,
+                          unit_of_measurement: 'px',
+                      },
+                  },
+              },
+              {
+                  name: 'canvas_width',
+                  required: false,
+                  selector: {
+                      number: {
+                          min: 100,
+                          max: 4000,
+                          step: 10,
+                          unit_of_measurement: 'px',
+                      },
+                  },
+              },
+              {
+                  name: 'canvas_height',
+                  required: false,
+                  selector: {
+                      number: {
+                          min: 100,
+                          max: 4000,
+                          step: 10,
                           unit_of_measurement: 'px',
                       },
                   },

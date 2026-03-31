@@ -61,7 +61,6 @@ Copy the built file and image to your Home Assistant configuration:
 
 ```bash
 cp dist/homeassistant-solar-panel-preview.js /path/to/homeassistant/config/www/
-cp solar-panel-frame.png /path/to/homeassistant/config/www/
 ```
 
 #### Step 3: Add Resource Reference
@@ -103,6 +102,8 @@ grid_size: 10              # Grid snap size in pixels (default: 10)
 panel_width: 80            # Panel width in pixels (default: 80)
 panel_height: 144          # Panel height in pixels (default: 144, 1:1.8 aspect ratio)
 canvas_rotation: -30       # Rotate the entire layout (degrees, clockwise)
+canvas_width: 800          # Optional fixed canvas width (px)
+canvas_height: 600         # Optional fixed canvas height (px)
 background_image: /local/roof-plan.png   # Optional roof photo/plan
 background_opacity: 0.4   # Background image opacity (0–1)
 panels:
@@ -134,7 +135,9 @@ panels:
 | `panel_width` | number | 80 | Width of each panel in pixels |
 | `panel_height` | number | 144 | Height of each panel in pixels (1:1.8 aspect ratio) |
 | `canvas_rotation` | number | 0 | Rotate the entire grid layout in degrees (-180 to 180) |
-| `background_image` | string | — | URL to a background image (e.g. `/local/roof-plan.png`) |
+| `canvas_width` | number | — | Fixed canvas width in pixels. When set (with `canvas_height`), overrides auto-sizing in both editor and dashboard |
+| `canvas_height` | number | — | Fixed canvas height in pixels. When set (with `canvas_width`), overrides auto-sizing in both editor and dashboard |
+| `background_image` | string | — | URL to a background image (e.g. `/local/roof-plan.png`). Anchored at top-left at natural size (not stretched) |
 | `background_opacity` | number | 0.4 | Opacity of the background image (0–1) |
 | `panels` | array | Required | List of solar panel configurations |
 
@@ -192,7 +195,7 @@ Panels snap smoothly to the configured grid size while dragging. This provides c
 ### Card Not Showing
 
 1. Check browser console for JavaScript errors (F12)
-2. Verify resource path is correct: `/local/homeassistant-solar-panel-preview` must exist
+2. Verify resource path is correct: `/local/homeassistant-solar-panel-preview.js` must exist
 3. Clear browser cache and reload Home Assistant
 
 ### Data Not Updating

@@ -18,6 +18,8 @@ interface SolarPanelGridCardConfig {
   grid_size?: number; // pixels for snap-to-grid
   panel_width?: number;
   panel_height?: number;
+  canvas_width?: number;       // optional fixed canvas width (px)
+  canvas_height?: number;      // optional fixed canvas height (px)
   canvas_rotation?: number;    // degrees, clockwise
   background_image?: string;
   background_opacity?: number;
@@ -545,6 +547,11 @@ export class SolarPanelGridCard extends LitElement {
   private getContainerSize(): { width: number; height: number } {
     const PADDING = 20; // px padding around content
 
+    // If explicit canvas dimensions are configured, always use them
+    if (this.config.canvas_width && this.config.canvas_height) {
+      return { width: this.config.canvas_width, height: this.config.canvas_height };
+    }
+
     if (this.isEditorPreview) {
       // In editor, use a large workspace for layout building
       return { width: this.containerWidth, height: this.containerHeight };
@@ -599,6 +606,7 @@ export class SolarPanelGridCard extends LitElement {
               ${Array.from(this.panels.entries()).map(
                 ([entityId, panel]) => {
                   const rotation = panel.config.rotation || 0;
+                  const totalRotation = rotation + canvasRotation;
                   const activeEntity = (this._showEnergy && panel.entityEnergy) ? panel.entityEnergy : panel.entity;
                   return html`
                     <div
@@ -619,7 +627,7 @@ export class SolarPanelGridCard extends LitElement {
                       ></div>
                       <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
                       <div class="panel-overlay">
-                        <div class="panel-value">
+                        <div class="panel-value" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">
                           ${activeEntity
                             ? html`
                                 <span class="value">${this.getProductionValue(activeEntity).toFixed(1)}</span>
@@ -627,7 +635,7 @@ export class SolarPanelGridCard extends LitElement {
                               `
                             : html`<span class="error">N/A</span>`}
                         </div>
-                        <div class="entity-id-suffix">${this.getPanelDisplayName(entityId, panel.config)}</div>
+                        <div class="entity-id-suffix" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">${this.getPanelDisplayName(entityId, panel.config)}</div>
                       </div>
                     </div>
                   `;
@@ -671,11 +679,10 @@ export class SolarPanelGridCard extends LitElement {
 
     .background-image {
       position: absolute;
-      width: 100%;
-      height: 100%;
       top: 0;
       left: 0;
-      object-fit: cover;
+      object-fit: none;
+      object-position: top left;
       z-index: 0;
       pointer-events: none;
     }
