@@ -86,6 +86,8 @@
       constructor() {
           super(...arguments);
           this._showEnergy = false;
+          this._scale = 1;
+          this._resizeObserver = undefined;
           this.panels = new Map();
           this.draggedPanel = null;
           this.dragOffset = { x: 0, y: 0 };
@@ -106,8 +108,9 @@
               if (!container)
                   return;
               const rect = container.getBoundingClientRect();
-              let x = e.clientX - rect.left - this.dragOffset.x;
-              let y = e.clientY - rect.top - this.dragOffset.y;
+              const scale = this._scale || 1;
+              let x = (e.clientX - rect.left - this.dragOffset.x) / scale;
+              let y = (e.clientY - rect.top - this.dragOffset.y) / scale;
               // Clamp to container bounds
               x = Math.max(0, Math.min(x, this.containerWidth - this.panelWidth));
               y = Math.max(0, Math.min(y, this.containerHeight - this.panelHeight));
@@ -160,6 +163,7 @@
               hass: { type: Object },
               config: { type: Object },
               _showEnergy: { state: true },
+              _scale: { state: true },
           };
       }
       // Determine whether this card is being rendered inside the editor's
@@ -299,9 +303,10 @@
               return;
           const containerRect = container.getBoundingClientRect();
           // Calculate offset from mouse position to panel's top-left corner
+          const scale = this._scale || 1;
           this.dragOffset = {
-              x: e.clientX - (containerRect.left + panel.config.x),
-              y: e.clientY - (containerRect.top + panel.config.y),
+              x: e.clientX - (containerRect.left + panel.config.x * scale),
+              y: e.clientY - (containerRect.top + panel.config.y * scale),
           };
           document.addEventListener('mousemove', this.onMouseMove);
           document.addEventListener('mouseup', this.onMouseUp);
@@ -346,6 +351,34 @@
           // Use ResizeObserver to actively enforce the width override
           this.enforceFullWidth();
           // panels map will be populated in update() when config changes
+      }
+      firstUpdated() {
+          this._resizeObserver = new ResizeObserver((entries) => {
+              for (const entry of entries) {
+                  const availableWidth = entry.contentRect.width;
+                  const size = this.getContainerSize();
+                  const canvasRotation = this.config.canvas_rotation || 0;
+                  const rotatedSize = this.getRotatedBounds(size.width, size.height, canvasRotation);
+                  let newScale = 1;
+                  // Only scale down if it exceeds available width
+                  if (availableWidth > 0 && availableWidth < rotatedSize.width) {
+                      newScale = availableWidth / rotatedSize.width;
+                  }
+                  if (Math.abs(this._scale - newScale) > 0.001) {
+                      this._scale = newScale;
+                  }
+              }
+          });
+          const content = this.shadowRoot?.querySelector('.card-content');
+          if (content) {
+              this._resizeObserver.observe(content);
+          }
+      }
+      disconnectedCallback() {
+          super.disconnectedCallback();
+          if (this._resizeObserver) {
+              this._resizeObserver.disconnect();
+          }
       }
       enforceFullWidth() {
           // Use setInterval to actively enforce width on parent elements
@@ -507,6 +540,9 @@
           const bgImage = this.config.background_image || '';
           const bgOpacity = this.config.background_opacity ?? 0.4;
           const hasEnergy = this._hasEnergyEntities();
+          const scale = this._scale || 1;
+          const wrapperWidth = Math.round(rotatedSize.width * scale);
+          const wrapperHeight = Math.round(rotatedSize.height * scale);
           return x `
       <ha-card>
         <div class="card-content">
@@ -519,8 +555,8 @@
               <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
             </div>
           ` : ''}
-          <div class="canvas-wrapper" style="width: ${rotatedSize.width}px; height: ${rotatedSize.height}px;">
-            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px;${canvasRotation ? ` transform: rotate(${canvasRotation}deg);` : ''}">
+          <div class="canvas-wrapper" style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;">
+            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width / 2}px; margin-top: -${size.height / 2}px; transform: scale(${scale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
               ${bgImage ? x `
                 <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
               ` : ''}
@@ -576,13 +612,14 @@
 
     .canvas-wrapper {
       position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      margin: 0 auto;
+      overflow: hidden;
     }
 
     .solar-grid-container {
-      position: relative;
+      position: absolute;
+      top: 50%;
+      left: 50%;
       background: transparent;
       border: 1px solid var(--divider-color);
       cursor: default;

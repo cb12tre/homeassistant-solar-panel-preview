@@ -5,7 +5,7 @@ A custom Home Assistant Lovelace card for displaying solar panels in an interact
 ## Features
 
 - **Grid Layout**: Display multiple solar panels in a flexible grid with auto-sizing canvas
-- **Drag & Drop**: Move panels freely around the canvas with smooth snapping (available when the dashboard is in edit mode or in the card editor preview)
+- **Drag & Drop**: Move panels freely around the canvas with smooth snapping (available in the card editor preview)
 - **Snap-to-Grid**: Panels snap to a configurable grid for neat alignment
 - **Live Data**: Real-time display of current production values from sensor entities
 - **Power / Energy Toggle**: Switch between instantaneous power (W) and daily energy (kWh) views with a slide toggle — configure a secondary energy entity per panel
@@ -17,9 +17,10 @@ A custom Home Assistant Lovelace card for displaying solar panels in an interact
   - Black (0%) → Dark Blue (Hue 240°) → Light Blue (Hue 180°) at 100%
   - Automatically scales based on unit type (kWh for daily energy, W for instantaneous power)
 - **Auto-Sizing Canvas**: In dashboard view the card fits tightly around your panels — no unnecessary scrollbars. In the editor preview the workspace stays large for layout building.
+- **Responsive Scaling**: The card automatically scales down to fit narrow containers (e.g. mobile or sidebar columns) while keeping dragging accurate at any scale
 - **Full-Width Canvas**: Automatically expands card to viewport width for maximum workspace
 - **Collapsible Panel UI**: Configuration panel headers collapse/expand to manage 30+ panels efficiently
-- **Card Picker**: Shows up in the Home Assistant "Add Card" dialog for easy discovery. If your array is large it's recommended not to use a full dashboard view instead of a card.
+- **Card Picker**: Shows up in the Home Assistant "Add Card" dialog for easy discovery. If your array is large, consider using a full-width dashboard view for best results.
 - **Configuration UI**: Drag-and-drop editor preview with schema-driven grid settings and panel-level configurations
 
 ## Preview
@@ -227,10 +228,11 @@ npm run lint       # Run ESLint
 src/
   ├── solar-panel-grid-card.ts       # Main card component
   ├── solar-panel-grid-card-editor.ts # Configuration UI
+  ├── panel-image.ts                  # Embedded panel image data URI
   └── index.ts                        # Entry point
 dist/
-  └── homeassistant-solar-panel-preview        # Built & bundled output
-solar-panel-frame.png                 # Solar panel image
+  ├── homeassistant-solar-panel-preview.js      # Built & bundled output
+  └── solar-panel-frame.png                     # Solar panel image
 ```
 
 ## License
