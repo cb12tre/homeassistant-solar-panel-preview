@@ -26,13 +26,13 @@ A custom Home Assistant Lovelace card for displaying solar panels in an interact
 ## Preview
 
 ### Card View
-<img src="card-preview.png" alt="Solar Panel Grid Card Preview" width="100%">
+<img src="https://raw.githubusercontent.com/mutilator/homeassistant-solar-panel-preview/refs/heads/main/card-preview.png" alt="Solar Panel Grid Card Preview" width="100%">
 
 ### Configuration Editor
 
 > NOTE: While dragging only works when the dashboard is in edit mode (e.g. when the configuration dialog is open), clicking the titlebar of the dialog can still make the preview area easier to manipulate.
 
-<img src="config-preview.png" alt="Configuration Editor Preview" width="100%">
+<img src="https://raw.githubusercontent.com/mutilator/homeassistant-solar-panel-preview/refs/heads/main/config-preview.png" alt="Configuration Editor Preview" width="100%">
 
 ## Installation
 
