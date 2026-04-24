@@ -9,6 +9,7 @@ A custom Home Assistant Lovelace card for displaying solar panels in an interact
 - **Snap-to-Grid**: Panels snap to a configurable grid for neat alignment
 - **Live Data**: Real-time display of current production values from sensor entities
 - **Power / Energy Toggle**: Switch between instantaneous power (W) and daily energy (kWh) views with a slide toggle — configure a secondary energy entity per panel
+- **Historical Playback**: Select any date and time (minute resolution) to view a 24-hour snapshot of all panel values, with a quick "Now" action to return to current time
 - **Per-Panel Rotation**: Rotate individual panels to match your physical roof layout
 - **Canvas Rotation**: Rotate the entire grid to orient the installation according to compass direction
 - **Background Image**: Overlay panels on a roof photo or plan for accurate positioning
@@ -167,6 +168,7 @@ Each panel displays:
 - **Production Value**: Current production displayed in center with unit of measurement
 - **Entity ID Suffix**: Last 4 characters of entity ID (or custom `name`) at bottom-right corner for quick identification
 - **W / kWh Toggle**: When energy entities are configured, a slide toggle in the top-right corner switches the entire card between power and energy views
+- **Date + Time Snapshot Controls**: A date picker and 24-hour slider at the top fetch history and render all panels at that selected timestamp
 
 ### Color Gradient
 

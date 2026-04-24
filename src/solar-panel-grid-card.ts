@@ -46,6 +46,7 @@ interface HassEntity {
 interface Hass {
   states: Record<string, HassEntity>;
   callService: (domain: string, service: string, data?: any) => Promise<void>;
+  callApi?: <T = any>(method: string, path: string, parameters?: Record<string, any>) => Promise<T>;
 }
 
 // Helper function to convert HSL to RGB
@@ -105,6 +106,10 @@ export class SolarPanelGridCard extends LitElement {
       config: { type: Object },
       _showEnergy: { state: true },
       _scale: { state: true },
+      _selectedDate: { state: true },
+      _selectedMinute: { state: true },
+      _historyLoading: { state: true },
+      _historyError: { state: true },
     };
   }
 
@@ -112,7 +117,14 @@ export class SolarPanelGridCard extends LitElement {
   config!: SolarPanelGridCardConfig;
   private _showEnergy = false;
   private _scale = 1;
+  private _selectedDate = '';
+  private _selectedMinute = 0;
+  private _historyLoading = false;
+  private _historyError = '';
   private _resizeObserver: ResizeObserver | undefined = undefined;
+  private _historyStates: Map<string, HassEntity> = new Map();
+  private _historyDebounceTimer: number | undefined;
+  private _historyRequestToken = 0;
   
   private panels: Map<
     string,
@@ -205,6 +217,7 @@ export class SolarPanelGridCard extends LitElement {
     this.panelWidth = config.panel_width || DEFAULT_PANEL_WIDTH;
     this.panelHeight = config.panel_height || DEFAULT_PANEL_HEIGHT;
     this._showEnergy = this._loadViewState();
+    this._initializeTimeSelection();
 
     this.panels.clear();
     config.panels.forEach((panelConfig) => {
@@ -264,8 +277,215 @@ export class SolarPanelGridCard extends LitElement {
           panel.entityEnergy = this.hass.states[panel.config.entity_energy];
         }
       });
+
+      // Keep selection on current minute by default while card remains in live view.
+      if (this._isTodaySelected()) {
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        if (Math.abs(this._selectedMinute - nowMinutes) <= 1) {
+          this._selectedMinute = nowMinutes;
+        }
+      }
+    }
+
+    // Do not auto-fetch history on frequent hass/config updates.
+    // History requests should only happen from explicit user timeline actions
+    // (date change, time slider change, or "Now" button).
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+    }
+    if (this._historyDebounceTimer !== undefined) {
+      window.clearTimeout(this._historyDebounceTimer);
+      this._historyDebounceTimer = undefined;
     }
   }
+
+  private _initializeTimeSelection(): void {
+    if (this._selectedDate) {
+      return;
+    }
+
+    const now = new Date();
+    this._selectedDate = this._toDateInputValue(now);
+    this._selectedMinute = now.getHours() * 60 + now.getMinutes();
+  }
+
+  private _toDateInputValue(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  private _minutesToLabel(totalMinutes: number): string {
+    const minutes = Math.max(0, Math.min(1439, totalMinutes));
+    const h = String(Math.floor(minutes / 60)).padStart(2, '0');
+    const m = String(minutes % 60).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  private _isTodaySelected(): boolean {
+    if (!this._selectedDate) return false;
+    return this._selectedDate === this._toDateInputValue(new Date());
+  }
+
+  private _getSelectedDateTime(): Date {
+    const [y, m, d] = this._selectedDate.split('-').map((n) => Number(n));
+    const local = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+    local.setMinutes(Math.max(0, Math.min(1439, this._selectedMinute)));
+    return local;
+  }
+
+  private _getHistoryEntityIds(): string[] {
+    const allIds = new Set<string>();
+    this.panels.forEach((panel) => {
+      allIds.add(panel.config.entity);
+      if (panel.config.entity_energy) {
+        allIds.add(panel.config.entity_energy);
+      }
+    });
+    return Array.from(allIds).filter((entityId) => !!entityId && !entityId.endsWith('.'));
+  }
+
+  private _scheduleHistoryFetch(delayMs = 150): void {
+    if (!this.hass || !this.config) {
+      return;
+    }
+
+    if (this._historyDebounceTimer !== undefined) {
+      window.clearTimeout(this._historyDebounceTimer);
+    }
+
+    this._historyDebounceTimer = window.setTimeout(() => {
+      this._historyDebounceTimer = undefined;
+      void this._fetchHistoricalSnapshot();
+    }, delayMs);
+  }
+
+  private async _fetchHistoricalSnapshot(): Promise<void> {
+    if (!this.hass?.callApi || !this._selectedDate) {
+      this._historyStates = new Map();
+      this._historyError = '';
+      this.requestUpdate();
+      return;
+    }
+
+    const entityIds = this._getHistoryEntityIds();
+    if (entityIds.length === 0) {
+      this._historyStates = new Map();
+      this._historyError = '';
+      this.requestUpdate();
+      return;
+    }
+
+    const requestToken = ++this._historyRequestToken;
+    this._historyLoading = true;
+    this._historyError = '';
+
+    try {
+      const endTime = this._getSelectedDateTime();
+      const startTime = new Date(endTime);
+      startTime.setHours(0, 0, 0, 0);
+
+      const path = `history/period/${encodeURIComponent(startTime.toISOString())}`
+        + `?filter_entity_id=${encodeURIComponent(entityIds.join(','))}`
+        + `&end_time=${encodeURIComponent(endTime.toISOString())}`;
+
+      const historyResult = await this.hass.callApi<any[]>('GET', path);
+      if (requestToken !== this._historyRequestToken) {
+        return;
+      }
+
+      const states = new Map<string, HassEntity>();
+      if (Array.isArray(historyResult)) {
+        historyResult.forEach((entityHistory: any) => {
+          if (!Array.isArray(entityHistory) || entityHistory.length === 0) {
+            return;
+          }
+          const latest = entityHistory[entityHistory.length - 1];
+          const entityId: string | undefined = latest?.entity_id;
+          if (!entityId) {
+            return;
+          }
+
+          const liveEntity = this.hass.states[entityId];
+          states.set(entityId, {
+            entity_id: entityId,
+            state: String(latest?.state ?? liveEntity?.state ?? '0'),
+            attributes: {
+              ...(liveEntity?.attributes || {}),
+              ...(latest?.attributes || {}),
+            },
+          });
+        });
+      }
+
+      this._historyStates = states;
+      this.requestUpdate();
+    } catch (err) {
+      if (requestToken !== this._historyRequestToken) {
+        return;
+      }
+      this._historyStates = new Map();
+      this._historyError = 'Unable to load historical data for the selected time.';
+      console.error('[SolarPanelGridCard] History fetch failed:', err);
+      this.requestUpdate();
+    } finally {
+      if (requestToken === this._historyRequestToken) {
+        this._historyLoading = false;
+      }
+    }
+  }
+
+  private _getDisplayEntity(entityId?: string): HassEntity | undefined {
+    if (!entityId) {
+      return undefined;
+    }
+    return this._historyStates.get(entityId) || this.hass?.states?.[entityId];
+  }
+
+  private _onDateChanged = (event: Event) => {
+    const value = (event.target as HTMLInputElement).value;
+    if (!value) return;
+    this._selectedDate = value;
+    this._scheduleHistoryFetch(0);
+  };
+
+  private _shiftSelectedDate(days: number): void {
+    if (!this._selectedDate) {
+      this._initializeTimeSelection();
+    }
+
+    const baseDate = this._getSelectedDateTime();
+    baseDate.setDate(baseDate.getDate() + days);
+    this._selectedDate = this._toDateInputValue(baseDate);
+    this._scheduleHistoryFetch(0);
+  }
+
+  private _goToPreviousDay = () => {
+    this._shiftSelectedDate(-1);
+  };
+
+  private _goToNextDay = () => {
+    this._shiftSelectedDate(1);
+  };
+
+  private _onTimeSliderChanged = (event: Event) => {
+    const minutes = Number((event.target as HTMLInputElement).value);
+    this._selectedMinute = Number.isFinite(minutes) ? Math.max(0, Math.min(1439, minutes)) : 0;
+    this._scheduleHistoryFetch(120);
+  };
+
+  private _jumpToNow = () => {
+    const now = new Date();
+    this._selectedDate = this._toDateInputValue(now);
+    this._selectedMinute = now.getHours() * 60 + now.getMinutes();
+    this._scheduleHistoryFetch(0);
+  };
 
   private getProductionValue(entity: HassEntity | undefined): number {
     if (!entity) return 0;
@@ -465,13 +685,6 @@ export class SolarPanelGridCard extends LitElement {
     }
   }
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-    }
-  }
-
   private enforceFullWidth() {
     // Use setInterval to actively enforce width on parent elements
     const enforcer = setInterval(() => {
@@ -654,19 +867,47 @@ export class SolarPanelGridCard extends LitElement {
     const scale = this._scale || 1;
     const wrapperWidth = Math.round(rotatedSize.width * scale);
     const wrapperHeight = Math.round(rotatedSize.height * scale);
+    const selectedDateTime = this._getSelectedDateTime();
+    const selectedDateTimeLabel = `${selectedDateTime.toLocaleDateString()} ${this._minutesToLabel(this._selectedMinute)}`;
 
     return html`
       <ha-card>
         <div class="card-content">
-          ${hasEnergy ? html`
-            <div class="view-toggle" @click="${this._toggleView}" title="Toggle between power and energy view">
-              <span class="toggle-label ${!this._showEnergy ? 'active' : ''}">W</span>
-              <div class="toggle-track ${this._showEnergy ? 'on' : ''}">
-                <div class="toggle-thumb"></div>
-              </div>
-              <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
+          <div class="top-controls">
+            <div class="history-controls">
+              <button type="button" class="history-day-btn" @click="${this._goToPreviousDay}" aria-label="Previous day" title="Previous day">&#8249;</button>
+              <button type="button" class="history-day-btn" @click="${this._goToNextDay}" aria-label="Next day" title="Next day">&#8250;</button>
+              <label for="history-date" class="history-label">Date</label>
+              <input id="history-date" class="history-date-input" type="date" .value="${this._selectedDate}" @change="${this._onDateChanged}" />
+              <label for="history-time" class="history-label">Time</label>
+              <input
+                id="history-time"
+                class="history-time-slider"
+                type="range"
+                min="0"
+                max="1439"
+                step="1"
+                .value="${String(this._selectedMinute)}"
+                @input="${this._onTimeSliderChanged}"
+              />
+              <span class="history-time-value">${this._minutesToLabel(this._selectedMinute)}</span>
+              <button type="button" class="history-now-btn" @click="${this._jumpToNow}">Now</button>
             </div>
-          ` : ''}
+            ${hasEnergy ? html`
+              <div class="view-toggle" @click="${this._toggleView}" title="Toggle between power and energy view">
+                <span class="toggle-label ${!this._showEnergy ? 'active' : ''}">W</span>
+                <div class="toggle-track ${this._showEnergy ? 'on' : ''}">
+                  <div class="toggle-thumb"></div>
+                </div>
+                <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
+              </div>
+            ` : ''}
+          </div>
+          <div class="history-meta">
+            <span>Snapshot: ${selectedDateTimeLabel}</span>
+            ${this._historyLoading ? html`<span class="history-status">Loading...</span>` : ''}
+          </div>
+          ${this._historyError ? html`<div class="history-error">${this._historyError}</div>` : ''}
           <div class="canvas-wrapper" style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;">
             <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width/2}px; margin-top: -${size.height/2}px; transform: scale(${scale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
               ${bgImage ? html`
@@ -676,7 +917,10 @@ export class SolarPanelGridCard extends LitElement {
                 ([entityId, panel]) => {
                   const rotation = panel.config.rotation || 0;
                   const totalRotation = rotation + canvasRotation;
-                  const activeEntity = (this._showEnergy && panel.entityEnergy) ? panel.entityEnergy : panel.entity;
+                  const activeEntityId = (this._showEnergy && panel.config.entity_energy)
+                    ? panel.config.entity_energy
+                    : entityId;
+                  const activeEntity = this._getDisplayEntity(activeEntityId);
                   return html`
                     <div
                       class="solar-panel"
@@ -730,6 +974,119 @@ export class SolarPanelGridCard extends LitElement {
       position: relative;
     }
 
+    .top-controls {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      padding-bottom: 8px;
+      margin-bottom: 6px;
+    }
+
+    .history-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 240px;
+      flex: 1;
+    }
+
+    .history-label {
+      font-size: 12px;
+      color: var(--secondary-text-color, #666);
+      font-weight: 500;
+    }
+
+    .history-date-input {
+      min-width: 130px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, #d0d0d0);
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      color: var(--primary-text-color, #222);
+      font-size: 12px;
+    }
+
+    .history-day-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--divider-color, #d0d0d0);
+      border-radius: 50%;
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      color: var(--primary-text-color, #222);
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+
+    .history-day-btn:hover {
+      border-color: var(--primary-color, #03a9f4);
+      color: var(--primary-color, #03a9f4);
+    }
+
+    .history-time-slider {
+      width: min(280px, 48vw);
+      min-width: 140px;
+      accent-color: var(--primary-color, #03a9f4);
+      cursor: pointer;
+    }
+
+    .history-time-value {
+      min-width: 42px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary-text-color, #333);
+      text-align: right;
+    }
+
+    .history-now-btn {
+      border: 1px solid var(--divider-color, #d0d0d0);
+      border-radius: 12px;
+      background: var(--card-background-color, var(--ha-card-background, #fff));
+      color: var(--primary-text-color, #222);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .history-now-btn:hover {
+      border-color: var(--primary-color, #03a9f4);
+      color: var(--primary-color, #03a9f4);
+    }
+
+    .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      color: var(--secondary-text-color, #666);
+    }
+
+    .history-status {
+      font-weight: 600;
+      color: var(--primary-color, #03a9f4);
+    }
+
+    .history-error {
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #d32f2f;
+    }
+
     .canvas-wrapper {
       position: relative;
       margin: 0 auto;
@@ -758,10 +1115,6 @@ export class SolarPanelGridCard extends LitElement {
     }
 
     .view-toggle {
-      position: sticky;
-      top: 0;
-      float: right;
-      z-index: 10;
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -771,7 +1124,7 @@ export class SolarPanelGridCard extends LitElement {
       padding: 4px 10px;
       cursor: pointer;
       user-select: none;
-      margin-bottom: 8px;
+      white-space: nowrap;
     }
 
     .view-toggle:hover {
