@@ -22,6 +22,7 @@ interface SolarPanelGridCardConfig {
   canvas_rotation?: number;
   background_image?: string;
   background_opacity?: number;
+  persist_view_state?: boolean;
 }
 
 /**
@@ -47,6 +48,7 @@ export class SolarPanelGridCardEditor extends LitElement {
       grid_size: 10,
       panel_width: 80,
       panel_height: 144,
+      persist_view_state: false,
     };
   }
 
@@ -296,6 +298,13 @@ export class SolarPanelGridCardEditor extends LitElement {
           },
         },
       },
+      {
+        name: 'persist_view_state',
+        required: false,
+        selector: {
+          boolean: {},
+        },
+      },
     ];
   }
 
@@ -311,6 +320,7 @@ export class SolarPanelGridCardEditor extends LitElement {
       canvas_width: 'Canvas Width (px)',
       canvas_height: 'Canvas Height (px)',
       canvas_rotation: 'Canvas Rotation (°)',
+      persist_view_state: 'Remember W / kWh Toggle State',
     };
     return labels[schema.name] || schema.name;
   }

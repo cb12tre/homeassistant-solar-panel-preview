@@ -107,6 +107,7 @@ canvas_width: 800          # Optional fixed canvas width (px)
 canvas_height: 600         # Optional fixed canvas height (px)
 background_image: /local/roof-plan.png   # Optional roof photo/plan
 background_opacity: 0.4   # Background image opacity (0–1)
+persist_view_state: false # Optional: remember W/kWh toggle in browser localStorage
 panels:
   - entity: sensor.solar_inverter_1
     entity_energy: sensor.solar_inverter_1_energy_today  # Optional energy entity
@@ -141,6 +142,7 @@ panels:
 | `background_image` | string | — | URL to a background image (e.g. `/local/roof-plan.png`). Anchored at top-left at natural size (not stretched) |
 | `background_opacity` | number | 0.4 | Opacity of the background image (0–1) |
 | `panels` | array | Required | List of solar panel configurations |
+| `persist_view_state` | boolean | false | When `true`, remembers the W/kWh toggle state in browser localStorage |
 
 #### Panel-Level Options
 

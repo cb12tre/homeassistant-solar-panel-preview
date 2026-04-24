@@ -156,6 +156,7 @@
           };
           this._toggleView = () => {
               this._showEnergy = !this._showEnergy;
+              this._saveViewState(this._showEnergy);
           };
       }
       static get properties() {
@@ -235,6 +236,7 @@
           this.gridSize = config.grid_size || DEFAULT_GRID_SIZE;
           this.panelWidth = config.panel_width || DEFAULT_PANEL_WIDTH;
           this.panelHeight = config.panel_height || DEFAULT_PANEL_HEIGHT;
+          this._showEnergy = this._loadViewState();
           this.panels.clear();
           config.panels.forEach((panelConfig) => {
               this.panels.set(panelConfig.entity, {
@@ -242,6 +244,28 @@
                   entity: undefined,
               });
           });
+      }
+      _loadViewState() {
+          if (!this.config?.persist_view_state) {
+              return false;
+          }
+          try {
+              return localStorage.getItem(SolarPanelGridCard.VIEW_STATE_STORAGE_KEY) === 'true';
+          }
+          catch {
+              return false;
+          }
+      }
+      _saveViewState(value) {
+          if (!this.config?.persist_view_state) {
+              return;
+          }
+          try {
+              localStorage.setItem(SolarPanelGridCard.VIEW_STATE_STORAGE_KEY, String(value));
+          }
+          catch {
+              // Ignore localStorage errors (e.g. private mode / restricted browser context)
+          }
       }
       update(changedProperties) {
           super.update(changedProperties);
@@ -597,6 +621,7 @@
     `;
       }
   }
+  SolarPanelGridCard.VIEW_STATE_STORAGE_KEY = 'solar-panel-card-show-energy';
   SolarPanelGridCard.styles = i$1 `
     ha-card {
       height: 100%;
@@ -812,6 +837,7 @@
                   canvas_width: 'Canvas Width (px)',
                   canvas_height: 'Canvas Height (px)',
                   canvas_rotation: 'Canvas Rotation (°)',
+                  persist_view_state: 'Remember W / kWh Toggle State',
               };
               return labels[schema.name] || schema.name;
           };
@@ -993,6 +1019,7 @@
               grid_size: 10,
               panel_width: 80,
               panel_height: 144,
+              persist_view_state: false,
           };
       }
       connectedCallback() {
@@ -1222,6 +1249,13 @@
                           step: 1,
                           unit_of_measurement: '°',
                       },
+                  },
+              },
+              {
+                  name: 'persist_view_state',
+                  required: false,
+                  selector: {
+                      boolean: {},
                   },
               },
           ];

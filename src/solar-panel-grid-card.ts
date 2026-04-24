@@ -23,6 +23,7 @@ interface SolarPanelGridCardConfig {
   canvas_rotation?: number;    // degrees, clockwise
   background_image?: string;
   background_opacity?: number;
+  persist_view_state?: boolean; // persist W/kWh toggle state in localStorage
 }
 
 // default values used throughout the card
@@ -96,6 +97,8 @@ function hslToRgb(h: number, s: number, l: number): string {
 }
 
 export class SolarPanelGridCard extends LitElement {
+  private static readonly VIEW_STATE_STORAGE_KEY = 'solar-panel-card-show-energy';
+
   static get properties() {
     return {
       hass: { type: Object },
@@ -201,6 +204,7 @@ export class SolarPanelGridCard extends LitElement {
     this.gridSize = config.grid_size || DEFAULT_GRID_SIZE;
     this.panelWidth = config.panel_width || DEFAULT_PANEL_WIDTH;
     this.panelHeight = config.panel_height || DEFAULT_PANEL_HEIGHT;
+    this._showEnergy = this._loadViewState();
 
     this.panels.clear();
     config.panels.forEach((panelConfig) => {
@@ -209,6 +213,30 @@ export class SolarPanelGridCard extends LitElement {
         entity: undefined,
       });
     });
+  }
+
+  private _loadViewState(): boolean {
+    if (!this.config?.persist_view_state) {
+      return false;
+    }
+
+    try {
+      return localStorage.getItem(SolarPanelGridCard.VIEW_STATE_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private _saveViewState(value: boolean): void {
+    if (!this.config?.persist_view_state) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(SolarPanelGridCard.VIEW_STATE_STORAGE_KEY, String(value));
+    } catch {
+      // Ignore localStorage errors (e.g. private mode / restricted browser context)
+    }
   }
 
   update(changedProperties: Map<string | number | symbol, unknown>) {
@@ -574,6 +602,7 @@ export class SolarPanelGridCard extends LitElement {
 
   private _toggleView = () => {
     this._showEnergy = !this._showEnergy;
+    this._saveViewState(this._showEnergy);
   };
 
   /**
