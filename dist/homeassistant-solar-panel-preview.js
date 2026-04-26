@@ -91,9 +91,19 @@
           this._selectedMinute = 0;
           this._historyLoading = false;
           this._historyError = '';
+          this._viewZoom = 1;
+          this._viewPanX = 0;
+          this._viewPanY = 0;
           this._resizeObserver = undefined;
           this._historyStates = new Map();
           this._historyRequestToken = 0;
+          this._activePointers = new Map();
+          this._isViewportPanning = false;
+          this._panStartPoint = { x: 0, y: 0 };
+          this._panStartOffset = { x: 0, y: 0 };
+          this._pinchLastDistance = 0;
+          this._pinchLastMidpoint = null;
+          this._suppressPanelClick = false;
           this.panels = new Map();
           this.draggedPanel = null;
           this.dragOffset = { x: 0, y: 0 };
@@ -126,6 +136,105 @@
               this._selectedDate = this._toDateInputValue(now);
               this._selectedMinute = now.getHours() * 60 + now.getMinutes();
               this._scheduleHistoryFetch(0);
+          };
+          this._resetViewportTransform = () => {
+              this._viewZoom = 1;
+              this._viewPanX = 0;
+              this._viewPanY = 0;
+          };
+          this._onViewportWheel = (event) => {
+              if (this.isEditorPreview) {
+                  return;
+              }
+              event.preventDefault();
+              const zoomFactor = Math.exp(-event.deltaY * 0.0015);
+              const point = this._getPointInViewport(event);
+              this._applyZoomAt(this._viewZoom * zoomFactor, point.x, point.y);
+          };
+          this._onViewportPointerDown = (event) => {
+              if (this.isEditorPreview) {
+                  return;
+              }
+              if (event.pointerType === 'mouse' && event.button !== 0) {
+                  return;
+              }
+              const point = this._getPointInViewport(event);
+              this._activePointers.set(event.pointerId, point);
+              const wrapper = this.shadowRoot?.querySelector('.canvas-wrapper');
+              if (wrapper && wrapper.setPointerCapture) {
+                  try {
+                      wrapper.setPointerCapture(event.pointerId);
+                  }
+                  catch {
+                      // Ignore browsers that fail capture for this pointer.
+                  }
+              }
+              if (this._activePointers.size === 1) {
+                  this._isViewportPanning = true;
+                  this._panStartPoint = point;
+                  this._panStartOffset = { x: this._viewPanX, y: this._viewPanY };
+              }
+              if (this._activePointers.size === 2) {
+                  this._isViewportPanning = false;
+                  this._pinchLastDistance = this._getPointerDistance();
+                  this._pinchLastMidpoint = this._getPointerMidpoint();
+                  this._suppressPanelClick = true;
+              }
+          };
+          this._onViewportPointerMove = (event) => {
+              if (this.isEditorPreview) {
+                  return;
+              }
+              if (!this._activePointers.has(event.pointerId)) {
+                  return;
+              }
+              const point = this._getPointInViewport(event);
+              this._activePointers.set(event.pointerId, point);
+              if (this._activePointers.size >= 2) {
+                  event.preventDefault();
+                  const distance = this._getPointerDistance();
+                  const midpoint = this._getPointerMidpoint();
+                  if (distance > 0 && this._pinchLastDistance > 0 && midpoint) {
+                      const zoomFactor = distance / this._pinchLastDistance;
+                      this._applyZoomAt(this._viewZoom * zoomFactor, midpoint.x, midpoint.y);
+                      if (this._pinchLastMidpoint) {
+                          const dx = midpoint.x - this._pinchLastMidpoint.x;
+                          const dy = midpoint.y - this._pinchLastMidpoint.y;
+                          this._applyPan(this._viewPanX + dx, this._viewPanY + dy);
+                      }
+                  }
+                  this._pinchLastDistance = distance;
+                  this._pinchLastMidpoint = midpoint;
+                  this._suppressPanelClick = true;
+                  return;
+              }
+              if (this._isViewportPanning && this._activePointers.size === 1) {
+                  event.preventDefault();
+                  const dx = point.x - this._panStartPoint.x;
+                  const dy = point.y - this._panStartPoint.y;
+                  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                      this._suppressPanelClick = true;
+                  }
+                  this._applyPan(this._panStartOffset.x + dx, this._panStartOffset.y + dy);
+              }
+          };
+          this._onViewportPointerUp = (event) => {
+              if (this.isEditorPreview) {
+                  return;
+              }
+              this._activePointers.delete(event.pointerId);
+              if (this._activePointers.size < 2) {
+                  this._pinchLastDistance = 0;
+                  this._pinchLastMidpoint = null;
+              }
+              if (this._activePointers.size === 1) {
+                  const remainingPoint = Array.from(this._activePointers.values())[0];
+                  this._isViewportPanning = true;
+                  this._panStartPoint = remainingPoint;
+                  this._panStartOffset = { x: this._viewPanX, y: this._viewPanY };
+                  return;
+              }
+              this._isViewportPanning = false;
           };
           this.onMouseMove = (e) => {
               e.preventDefault();
@@ -199,6 +308,9 @@
               _selectedMinute: { state: true },
               _historyLoading: { state: true },
               _historyError: { state: true },
+              _viewZoom: { state: true },
+              _viewPanX: { state: true },
+              _viewPanY: { state: true },
           };
       }
       // Determine whether this card is being rendered inside the editor's
@@ -333,6 +445,9 @@
                       this._selectedMinute = nowMinutes;
                   }
               }
+          }
+          if (changedProperties.has('_scale') || changedProperties.has('config')) {
+              this._applyPan(this._viewPanX, this._viewPanY);
           }
           // Do not auto-fetch history on frequent hass/config updates.
           // History requests should only happen from explicit user timeline actions
@@ -503,6 +618,77 @@
               return value;
           return Math.round(value / this.gridSize) * this.gridSize;
       }
+      _clamp(value, min, max) {
+          return Math.min(max, Math.max(min, value));
+      }
+      _clampZoom(value) {
+          return this._clamp(value, 1, 5);
+      }
+      _getViewportMetrics() {
+          const size = this.getContainerSize();
+          const canvasRotation = this.config.canvas_rotation || 0;
+          const rotatedSize = this.getRotatedBounds(size.width, size.height, canvasRotation);
+          const scale = this._scale || 1;
+          return {
+              width: Math.max(1, Math.round(rotatedSize.width * scale)),
+              height: Math.max(1, Math.round(rotatedSize.height * scale)),
+          };
+      }
+      _applyPan(panX, panY) {
+          const zoom = this._clampZoom(this._viewZoom);
+          const metrics = this._getViewportMetrics();
+          const maxPanX = Math.max(0, (metrics.width * zoom - metrics.width) / 2);
+          const maxPanY = Math.max(0, (metrics.height * zoom - metrics.height) / 2);
+          const clampedX = this._clamp(panX, -maxPanX, maxPanX);
+          const clampedY = this._clamp(panY, -maxPanY, maxPanY);
+          if (Math.abs(this._viewPanX - clampedX) > 0.01 || Math.abs(this._viewPanY - clampedY) > 0.01) {
+              this._viewPanX = clampedX;
+              this._viewPanY = clampedY;
+          }
+      }
+      _applyZoomAt(targetZoom, focusX, focusY) {
+          const nextZoom = this._clampZoom(targetZoom);
+          const currentZoom = this._clampZoom(this._viewZoom);
+          const metrics = this._getViewportMetrics();
+          const centerX = metrics.width / 2;
+          const centerY = metrics.height / 2;
+          const worldX = (focusX - centerX - this._viewPanX) / currentZoom;
+          const worldY = (focusY - centerY - this._viewPanY) / currentZoom;
+          this._viewZoom = nextZoom;
+          const nextPanX = focusX - centerX - worldX * nextZoom;
+          const nextPanY = focusY - centerY - worldY * nextZoom;
+          this._applyPan(nextPanX, nextPanY);
+      }
+      _getPointInViewport(event) {
+          const target = this.shadowRoot?.querySelector('.canvas-wrapper');
+          if (!target) {
+              return { x: 0, y: 0 };
+          }
+          const rect = target.getBoundingClientRect();
+          return {
+              x: event.clientX - rect.left,
+              y: event.clientY - rect.top,
+          };
+      }
+      _getPointerDistance() {
+          const points = Array.from(this._activePointers.values());
+          if (points.length < 2) {
+              return 0;
+          }
+          const dx = points[1].x - points[0].x;
+          const dy = points[1].y - points[0].y;
+          return Math.hypot(dx, dy);
+      }
+      _getPointerMidpoint() {
+          const points = Array.from(this._activePointers.values());
+          if (points.length < 2) {
+              return null;
+          }
+          return {
+              x: (points[0].x + points[1].x) / 2,
+              y: (points[0].y + points[1].y) / 2,
+          };
+      }
       onPanelMouseDown(e, entityId) {
           // only allow dragging inside the editor preview
           if (!this.isEditorPreview) {
@@ -530,6 +716,10 @@
       onPanelClick(e, entityId) {
           e.preventDefault();
           e.stopPropagation();
+          if (this._suppressPanelClick) {
+              this._suppressPanelClick = false;
+              return;
+          }
           // ignore event if panel is being dragged
           if (this.draggedPanel === entityId) {
               return;
@@ -750,9 +940,14 @@
           const bgImage = this.config.background_image || '';
           const bgOpacity = this.config.background_opacity ?? 0.4;
           const hasEnergy = this._hasEnergyEntities();
-          const scale = this._scale || 1;
-          const wrapperWidth = Math.round(rotatedSize.width * scale);
-          const wrapperHeight = Math.round(rotatedSize.height * scale);
+          const baseScale = this._scale || 1;
+          const wrapperWidth = Math.round(rotatedSize.width * baseScale);
+          const wrapperHeight = Math.round(rotatedSize.height * baseScale);
+          const liveInteractionEnabled = !this.isEditorPreview;
+          const viewZoom = liveInteractionEnabled ? this._viewZoom : 1;
+          const panX = liveInteractionEnabled ? this._viewPanX : 0;
+          const panY = liveInteractionEnabled ? this._viewPanY : 0;
+          const combinedScale = baseScale * viewZoom;
           const selectedDateTime = this._getSelectedDateTime();
           const selectedDateTimeLabel = `${selectedDateTime.toLocaleDateString()} ${this._minutesToLabel(this._selectedMinute)}`;
           return x `
@@ -793,8 +988,17 @@
             ${this._historyLoading ? x `<span class="history-status">Loading...</span>` : ''}
           </div>
           ${this._historyError ? x `<div class="history-error">${this._historyError}</div>` : ''}
-          <div class="canvas-wrapper" style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;">
-            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width / 2}px; margin-top: -${size.height / 2}px; transform: scale(${scale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
+          <div
+            class="canvas-wrapper ${liveInteractionEnabled ? 'interactive' : ''}"
+            style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;"
+            @wheel="${this._onViewportWheel}"
+            @pointerdown="${this._onViewportPointerDown}"
+            @pointermove="${this._onViewportPointerMove}"
+            @pointerup="${this._onViewportPointerUp}"
+            @pointercancel="${this._onViewportPointerUp}"
+            @dblclick="${this._resetViewportTransform}"
+          >
+            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width / 2}px; margin-top: -${size.height / 2}px; transform: translate(${panX}px, ${panY}px) scale(${combinedScale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
               ${bgImage ? x `
                 <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
               ` : ''}
@@ -969,6 +1173,15 @@
       position: relative;
       margin: 0 auto;
       overflow: hidden;
+    }
+
+    .canvas-wrapper.interactive {
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .canvas-wrapper.interactive:active {
+      cursor: grabbing;
     }
 
     .solar-grid-container {

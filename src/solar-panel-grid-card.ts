@@ -110,6 +110,9 @@ export class SolarPanelGridCard extends LitElement {
       _selectedMinute: { state: true },
       _historyLoading: { state: true },
       _historyError: { state: true },
+      _viewZoom: { state: true },
+      _viewPanX: { state: true },
+      _viewPanY: { state: true },
     };
   }
 
@@ -121,10 +124,20 @@ export class SolarPanelGridCard extends LitElement {
   private _selectedMinute = 0;
   private _historyLoading = false;
   private _historyError = '';
+  private _viewZoom = 1;
+  private _viewPanX = 0;
+  private _viewPanY = 0;
   private _resizeObserver: ResizeObserver | undefined = undefined;
   private _historyStates: Map<string, HassEntity> = new Map();
   private _historyDebounceTimer: number | undefined;
   private _historyRequestToken = 0;
+  private _activePointers: Map<number, { x: number; y: number }> = new Map();
+  private _isViewportPanning = false;
+  private _panStartPoint = { x: 0, y: 0 };
+  private _panStartOffset = { x: 0, y: 0 };
+  private _pinchLastDistance = 0;
+  private _pinchLastMidpoint: { x: number; y: number } | null = null;
+  private _suppressPanelClick = false;
   
   private panels: Map<
     string,
@@ -286,6 +299,10 @@ export class SolarPanelGridCard extends LitElement {
           this._selectedMinute = nowMinutes;
         }
       }
+    }
+
+    if (changedProperties.has('_scale') || changedProperties.has('config')) {
+      this._applyPan(this._viewPanX, this._viewPanY);
     }
 
     // Do not auto-fetch history on frequent hass/config updates.
@@ -508,6 +525,210 @@ export class SolarPanelGridCard extends LitElement {
     return Math.round(value / this.gridSize) * this.gridSize;
   }
 
+  private _clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  private _clampZoom(value: number): number {
+    return this._clamp(value, 1, 5);
+  }
+
+  private _getViewportMetrics(): { width: number; height: number } {
+    const size = this.getContainerSize();
+    const canvasRotation = this.config.canvas_rotation || 0;
+    const rotatedSize = this.getRotatedBounds(size.width, size.height, canvasRotation);
+    const scale = this._scale || 1;
+
+    return {
+      width: Math.max(1, Math.round(rotatedSize.width * scale)),
+      height: Math.max(1, Math.round(rotatedSize.height * scale)),
+    };
+  }
+
+  private _applyPan(panX: number, panY: number): void {
+    const zoom = this._clampZoom(this._viewZoom);
+    const metrics = this._getViewportMetrics();
+    const maxPanX = Math.max(0, (metrics.width * zoom - metrics.width) / 2);
+    const maxPanY = Math.max(0, (metrics.height * zoom - metrics.height) / 2);
+    const clampedX = this._clamp(panX, -maxPanX, maxPanX);
+    const clampedY = this._clamp(panY, -maxPanY, maxPanY);
+
+    if (Math.abs(this._viewPanX - clampedX) > 0.01 || Math.abs(this._viewPanY - clampedY) > 0.01) {
+      this._viewPanX = clampedX;
+      this._viewPanY = clampedY;
+    }
+  }
+
+  private _applyZoomAt(targetZoom: number, focusX: number, focusY: number): void {
+    const nextZoom = this._clampZoom(targetZoom);
+    const currentZoom = this._clampZoom(this._viewZoom);
+    const metrics = this._getViewportMetrics();
+    const centerX = metrics.width / 2;
+    const centerY = metrics.height / 2;
+
+    const worldX = (focusX - centerX - this._viewPanX) / currentZoom;
+    const worldY = (focusY - centerY - this._viewPanY) / currentZoom;
+
+    this._viewZoom = nextZoom;
+
+    const nextPanX = focusX - centerX - worldX * nextZoom;
+    const nextPanY = focusY - centerY - worldY * nextZoom;
+    this._applyPan(nextPanX, nextPanY);
+  }
+
+  private _resetViewportTransform = () => {
+    this._viewZoom = 1;
+    this._viewPanX = 0;
+    this._viewPanY = 0;
+  };
+
+  private _getPointInViewport(event: MouseEvent | PointerEvent | WheelEvent): { x: number; y: number } {
+    const target = this.shadowRoot?.querySelector('.canvas-wrapper') as HTMLElement | null;
+    if (!target) {
+      return { x: 0, y: 0 };
+    }
+
+    const rect = target.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  }
+
+  private _getPointerDistance(): number {
+    const points = Array.from(this._activePointers.values());
+    if (points.length < 2) {
+      return 0;
+    }
+
+    const dx = points[1].x - points[0].x;
+    const dy = points[1].y - points[0].y;
+    return Math.hypot(dx, dy);
+  }
+
+  private _getPointerMidpoint(): { x: number; y: number } | null {
+    const points = Array.from(this._activePointers.values());
+    if (points.length < 2) {
+      return null;
+    }
+
+    return {
+      x: (points[0].x + points[1].x) / 2,
+      y: (points[0].y + points[1].y) / 2,
+    };
+  }
+
+  private _onViewportWheel = (event: WheelEvent) => {
+    if (this.isEditorPreview) {
+      return;
+    }
+
+    event.preventDefault();
+    const zoomFactor = Math.exp(-event.deltaY * 0.0015);
+    const point = this._getPointInViewport(event);
+    this._applyZoomAt(this._viewZoom * zoomFactor, point.x, point.y);
+  };
+
+  private _onViewportPointerDown = (event: PointerEvent) => {
+    if (this.isEditorPreview) {
+      return;
+    }
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    const point = this._getPointInViewport(event);
+    this._activePointers.set(event.pointerId, point);
+
+    const wrapper = this.shadowRoot?.querySelector('.canvas-wrapper') as HTMLElement | null;
+    if (wrapper && wrapper.setPointerCapture) {
+      try {
+        wrapper.setPointerCapture(event.pointerId);
+      } catch {
+        // Ignore browsers that fail capture for this pointer.
+      }
+    }
+
+    if (this._activePointers.size === 1) {
+      this._isViewportPanning = true;
+      this._panStartPoint = point;
+      this._panStartOffset = { x: this._viewPanX, y: this._viewPanY };
+    }
+
+    if (this._activePointers.size === 2) {
+      this._isViewportPanning = false;
+      this._pinchLastDistance = this._getPointerDistance();
+      this._pinchLastMidpoint = this._getPointerMidpoint();
+      this._suppressPanelClick = true;
+    }
+  };
+
+  private _onViewportPointerMove = (event: PointerEvent) => {
+    if (this.isEditorPreview) {
+      return;
+    }
+    if (!this._activePointers.has(event.pointerId)) {
+      return;
+    }
+
+    const point = this._getPointInViewport(event);
+    this._activePointers.set(event.pointerId, point);
+
+    if (this._activePointers.size >= 2) {
+      event.preventDefault();
+      const distance = this._getPointerDistance();
+      const midpoint = this._getPointerMidpoint();
+
+      if (distance > 0 && this._pinchLastDistance > 0 && midpoint) {
+        const zoomFactor = distance / this._pinchLastDistance;
+        this._applyZoomAt(this._viewZoom * zoomFactor, midpoint.x, midpoint.y);
+
+        if (this._pinchLastMidpoint) {
+          const dx = midpoint.x - this._pinchLastMidpoint.x;
+          const dy = midpoint.y - this._pinchLastMidpoint.y;
+          this._applyPan(this._viewPanX + dx, this._viewPanY + dy);
+        }
+      }
+
+      this._pinchLastDistance = distance;
+      this._pinchLastMidpoint = midpoint;
+      this._suppressPanelClick = true;
+      return;
+    }
+
+    if (this._isViewportPanning && this._activePointers.size === 1) {
+      event.preventDefault();
+      const dx = point.x - this._panStartPoint.x;
+      const dy = point.y - this._panStartPoint.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        this._suppressPanelClick = true;
+      }
+      this._applyPan(this._panStartOffset.x + dx, this._panStartOffset.y + dy);
+    }
+  };
+
+  private _onViewportPointerUp = (event: PointerEvent) => {
+    if (this.isEditorPreview) {
+      return;
+    }
+
+    this._activePointers.delete(event.pointerId);
+    if (this._activePointers.size < 2) {
+      this._pinchLastDistance = 0;
+      this._pinchLastMidpoint = null;
+    }
+
+    if (this._activePointers.size === 1) {
+      const remainingPoint = Array.from(this._activePointers.values())[0];
+      this._isViewportPanning = true;
+      this._panStartPoint = remainingPoint;
+      this._panStartOffset = { x: this._viewPanX, y: this._viewPanY };
+      return;
+    }
+
+    this._isViewportPanning = false;
+  };
+
 
 
   private onPanelMouseDown(e: MouseEvent, entityId: string) {
@@ -543,6 +764,11 @@ export class SolarPanelGridCard extends LitElement {
   private onPanelClick(e: MouseEvent, entityId: string) {
     e.preventDefault();
     e.stopPropagation();
+
+    if (this._suppressPanelClick) {
+      this._suppressPanelClick = false;
+      return;
+    }
 
     // ignore event if panel is being dragged
     if (this.draggedPanel === entityId) {
@@ -864,9 +1090,14 @@ export class SolarPanelGridCard extends LitElement {
     const bgImage = this.config.background_image || '';
     const bgOpacity = this.config.background_opacity ?? 0.4;
     const hasEnergy = this._hasEnergyEntities();
-    const scale = this._scale || 1;
-    const wrapperWidth = Math.round(rotatedSize.width * scale);
-    const wrapperHeight = Math.round(rotatedSize.height * scale);
+    const baseScale = this._scale || 1;
+    const wrapperWidth = Math.round(rotatedSize.width * baseScale);
+    const wrapperHeight = Math.round(rotatedSize.height * baseScale);
+    const liveInteractionEnabled = !this.isEditorPreview;
+    const viewZoom = liveInteractionEnabled ? this._viewZoom : 1;
+    const panX = liveInteractionEnabled ? this._viewPanX : 0;
+    const panY = liveInteractionEnabled ? this._viewPanY : 0;
+    const combinedScale = baseScale * viewZoom;
     const selectedDateTime = this._getSelectedDateTime();
     const selectedDateTimeLabel = `${selectedDateTime.toLocaleDateString()} ${this._minutesToLabel(this._selectedMinute)}`;
 
@@ -908,8 +1139,17 @@ export class SolarPanelGridCard extends LitElement {
             ${this._historyLoading ? html`<span class="history-status">Loading...</span>` : ''}
           </div>
           ${this._historyError ? html`<div class="history-error">${this._historyError}</div>` : ''}
-          <div class="canvas-wrapper" style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;">
-            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width/2}px; margin-top: -${size.height/2}px; transform: scale(${scale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
+          <div
+            class="canvas-wrapper ${liveInteractionEnabled ? 'interactive' : ''}"
+            style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;"
+            @wheel="${this._onViewportWheel}"
+            @pointerdown="${this._onViewportPointerDown}"
+            @pointermove="${this._onViewportPointerMove}"
+            @pointerup="${this._onViewportPointerUp}"
+            @pointercancel="${this._onViewportPointerUp}"
+            @dblclick="${this._resetViewportTransform}"
+          >
+            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width/2}px; margin-top: -${size.height/2}px; transform: translate(${panX}px, ${panY}px) scale(${combinedScale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
               ${bgImage ? html`
                 <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
               ` : ''}
@@ -1091,6 +1331,15 @@ export class SolarPanelGridCard extends LitElement {
       position: relative;
       margin: 0 auto;
       overflow: hidden;
+    }
+
+    .canvas-wrapper.interactive {
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .canvas-wrapper.interactive:active {
+      cursor: grabbing;
     }
 
     .solar-grid-container {
