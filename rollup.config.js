@@ -1,6 +1,23 @@
 import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
+import fs from 'node:fs';
+import path from 'node:path';
+
+function rawTextPlugin() {
+  return {
+    name: 'raw-text-plugin',
+    load(id) {
+      const ext = path.extname(id);
+      if (ext !== '.css' && ext !== '.tpl') {
+        return null;
+      }
+
+      const content = fs.readFileSync(id, 'utf8');
+      return `export default ${JSON.stringify(content)};`;
+    },
+  };
+}
 
 export default {
   input: 'src/index.ts',
@@ -15,6 +32,7 @@ export default {
   },
   external: [],
   plugins: [
+    rawTextPlugin(),
     typescript({
       tsconfig: false,
       compilerOptions: {

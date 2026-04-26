@@ -1,5 +1,18 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, css, unsafeCSS } from 'lit';
 import { PANEL_IMAGE_DATA_URI } from './panel-image';
+import { htmlFromTpl } from './template-utils';
+import cardStyles from './templates/solar-panel-grid-card.css';
+import cardRenderTpl from './templates/solar-panel-grid-card-render.tpl';
+import cardTopControlsTpl from './templates/solar-panel-grid-card-top-controls.tpl';
+import cardEnergyToggleTpl from './templates/solar-panel-grid-card-energy-toggle.tpl';
+import cardHistoryMetaTpl from './templates/solar-panel-grid-card-history-meta.tpl';
+import cardHistoryStatusTpl from './templates/solar-panel-grid-card-history-status.tpl';
+import cardHistoryErrorTpl from './templates/solar-panel-grid-card-history-error.tpl';
+import cardCanvasTpl from './templates/solar-panel-grid-card-canvas.tpl';
+import cardBackgroundImageTpl from './templates/solar-panel-grid-card-background-image.tpl';
+import cardPanelTpl from './templates/solar-panel-grid-card-panel.tpl';
+import cardPanelValueTpl from './templates/solar-panel-grid-card-panel-value.tpl';
+import cardPanelErrorTpl from './templates/solar-panel-grid-card-panel-error.tpl';
 
 interface SolarPanelConfig {
   entity: string;
@@ -1083,6 +1096,118 @@ export class SolarPanelGridCard extends LitElement {
     };
   }
 
+  private _renderTopControls(hasEnergy: boolean) {
+    const energyToggleMarkup = hasEnergy
+      ? htmlFromTpl(
+          cardEnergyToggleTpl,
+          this._toggleView,
+          `toggle-label ${!this._showEnergy ? 'active' : ''}`,
+          `toggle-track ${this._showEnergy ? 'on' : ''}`,
+          `toggle-label ${this._showEnergy ? 'active' : ''}`
+        )
+      : '';
+
+    return htmlFromTpl(
+      cardTopControlsTpl,
+      this._goToPreviousDay,
+      this._goToNextDay,
+      this._selectedDate,
+      this._onDateChanged,
+      String(this._selectedMinute),
+      this._onTimeSliderChanged,
+      this._minutesToLabel(this._selectedMinute),
+      this._jumpToNow,
+      energyToggleMarkup
+    );
+  }
+
+  private _renderHistoryMeta(selectedDateTimeLabel: string) {
+    const statusMarkup = this._historyLoading ? htmlFromTpl(cardHistoryStatusTpl) : '';
+    const errorMarkup = this._historyError ? htmlFromTpl(cardHistoryErrorTpl, this._historyError) : '';
+
+    return htmlFromTpl(cardHistoryMetaTpl, selectedDateTimeLabel, statusMarkup, errorMarkup);
+  }
+
+  private _renderPanel(entityId: string, panel: { config: SolarPanelConfig; entity?: HassEntity; entityEnergy?: HassEntity }, canvasRotation: number) {
+    const rotation = panel.config.rotation || 0;
+    const totalRotation = rotation + canvasRotation;
+    const activeEntityId = (this._showEnergy && panel.config.entity_energy)
+      ? panel.config.entity_energy
+      : entityId;
+    const activeEntity = this._getDisplayEntity(activeEntityId);
+    const panelStyle = `left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;${rotation ? ` transform: rotate(${rotation}deg);` : ''}`;
+    const panelValueStyle = totalRotation ? `transform: rotate(${-totalRotation}deg)` : '';
+    const entitySuffixStyle = totalRotation ? `transform: rotate(${-totalRotation}deg)` : '';
+    const backgroundColor = this.getProductionColor(
+      this.getProductionValue(activeEntity),
+      this.getMaxValue(
+        panel.config,
+        activeEntity?.attributes.unit_of_measurement || 'W'
+      )
+    );
+    const panelValueMarkup = activeEntity
+      ? htmlFromTpl(
+          cardPanelValueTpl,
+          this.getProductionValue(activeEntity).toFixed(1),
+          activeEntity.attributes.unit_of_measurement || ''
+        )
+      : htmlFromTpl(cardPanelErrorTpl);
+
+    return htmlFromTpl(
+      cardPanelTpl,
+      panelStyle,
+      (e: MouseEvent) => this.onPanelClick(e, entityId),
+      (e: MouseEvent) => this.onPanelMouseDown(e, entityId),
+      backgroundColor,
+      this.panelImage,
+      panelValueStyle,
+      panelValueMarkup,
+      entitySuffixStyle,
+      this.getPanelDisplayName(entityId, panel.config)
+    );
+  }
+
+  private _renderCanvas(
+    size: { width: number; height: number },
+    canvasRotation: number,
+    bgImage: string,
+    bgOpacity: number,
+    wrapperWidth: number,
+    wrapperHeight: number,
+    liveInteractionEnabled: boolean,
+    panX: number,
+    panY: number,
+    combinedScale: number
+  ) {
+    const wrapperClass = `canvas-wrapper ${liveInteractionEnabled ? 'interactive' : ''}`;
+    const rotationStyle = canvasRotation ? ` rotate(${canvasRotation}deg)` : '';
+    const backgroundMarkup = bgImage ? htmlFromTpl(cardBackgroundImageTpl, bgImage, bgOpacity) : '';
+    const panelMarkup = Array.from(this.panels.entries()).map(([entityId, panel]) => this._renderPanel(entityId, panel, canvasRotation));
+
+    return htmlFromTpl(
+      cardCanvasTpl,
+      wrapperClass,
+      wrapperWidth,
+      wrapperHeight,
+      this._onViewportWheel,
+      this._onViewportPointerDown,
+      this._onViewportPointerMove,
+      this._onViewportPointerUp,
+      this._onViewportPointerUp,
+      this._resetViewportTransform,
+      size.width,
+      size.height,
+      size.width / 2,
+      size.height / 2,
+      panX,
+      panY,
+      combinedScale,
+      rotationStyle,
+      backgroundMarkup,
+      panelMarkup
+    );
+  }
+
   render() {
     const size = this.getContainerSize();
     const canvasRotation = this.config.canvas_rotation || 0;
@@ -1101,413 +1226,28 @@ export class SolarPanelGridCard extends LitElement {
     const selectedDateTime = this._getSelectedDateTime();
     const selectedDateTimeLabel = `${selectedDateTime.toLocaleDateString()} ${this._minutesToLabel(this._selectedMinute)}`;
 
-    return html`
-      <ha-card>
-        <div class="card-content">
-          <div class="top-controls">
-            <div class="history-controls">
-              <button type="button" class="history-day-btn" @click="${this._goToPreviousDay}" aria-label="Previous day" title="Previous day">&#8249;</button>
-              <button type="button" class="history-day-btn" @click="${this._goToNextDay}" aria-label="Next day" title="Next day">&#8250;</button>
-              <label for="history-date" class="history-label">Date</label>
-              <input id="history-date" class="history-date-input" type="date" .value="${this._selectedDate}" @change="${this._onDateChanged}" />
-              <label for="history-time" class="history-label">Time</label>
-              <input
-                id="history-time"
-                class="history-time-slider"
-                type="range"
-                min="0"
-                max="1439"
-                step="1"
-                .value="${String(this._selectedMinute)}"
-                @input="${this._onTimeSliderChanged}"
-              />
-              <span class="history-time-value">${this._minutesToLabel(this._selectedMinute)}</span>
-              <button type="button" class="history-now-btn" @click="${this._jumpToNow}">Now</button>
-            </div>
-            ${hasEnergy ? html`
-              <div class="view-toggle" @click="${this._toggleView}" title="Toggle between power and energy view">
-                <span class="toggle-label ${!this._showEnergy ? 'active' : ''}">W</span>
-                <div class="toggle-track ${this._showEnergy ? 'on' : ''}">
-                  <div class="toggle-thumb"></div>
-                </div>
-                <span class="toggle-label ${this._showEnergy ? 'active' : ''}">kWh</span>
-              </div>
-            ` : ''}
-          </div>
-          <div class="history-meta">
-            <span>Snapshot: ${selectedDateTimeLabel}</span>
-            ${this._historyLoading ? html`<span class="history-status">Loading...</span>` : ''}
-          </div>
-          ${this._historyError ? html`<div class="history-error">${this._historyError}</div>` : ''}
-          <div
-            class="canvas-wrapper ${liveInteractionEnabled ? 'interactive' : ''}"
-            style="width: ${wrapperWidth}px; height: ${wrapperHeight}px;"
-            @wheel="${this._onViewportWheel}"
-            @pointerdown="${this._onViewportPointerDown}"
-            @pointermove="${this._onViewportPointerMove}"
-            @pointerup="${this._onViewportPointerUp}"
-            @pointercancel="${this._onViewportPointerUp}"
-            @dblclick="${this._resetViewportTransform}"
-          >
-            <div class="solar-grid-container" style="width: ${size.width}px; height: ${size.height}px; margin-left: -${size.width/2}px; margin-top: -${size.height/2}px; transform: translate(${panX}px, ${panY}px) scale(${combinedScale})${canvasRotation ? ` rotate(${canvasRotation}deg)` : ''};">
-              ${bgImage ? html`
-                <img src="${bgImage}" alt="" class="background-image" style="opacity: ${bgOpacity};" />
-              ` : ''}
-              ${Array.from(this.panels.entries()).map(
-                ([entityId, panel]) => {
-                  const rotation = panel.config.rotation || 0;
-                  const totalRotation = rotation + canvasRotation;
-                  const activeEntityId = (this._showEnergy && panel.config.entity_energy)
-                    ? panel.config.entity_energy
-                    : entityId;
-                  const activeEntity = this._getDisplayEntity(activeEntityId);
-                  return html`
-                    <div
-                      class="solar-panel"
-                      style="left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;${rotation ? ` transform: rotate(${rotation}deg);` : ''}"
-                      @click="${(e: MouseEvent) => this.onPanelClick(e, entityId)}"
-                      @mousedown="${(e: MouseEvent) => this.onPanelMouseDown(e, entityId)}"
-                    >
-                      <div
-                        class="panel-background"
-                        style="background-color: ${this.getProductionColor(
-                          this.getProductionValue(activeEntity),
-                          this.getMaxValue(
-                            panel.config,
-                            activeEntity?.attributes.unit_of_measurement || 'W'
-                          )
-                        )}"
-                      ></div>
-                      <img src="${this.panelImage}" alt="Solar Panel" class="panel-image" />
-                      <div class="panel-overlay">
-                        <div class="panel-value" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">
-                          ${activeEntity
-                            ? html`
-                                <span class="value">${this.getProductionValue(activeEntity).toFixed(1)}</span>
-                                <span class="unit">${activeEntity.attributes.unit_of_measurement || ''}</span>
-                              `
-                            : html`<span class="error">N/A</span>`}
-                        </div>
-                        <div class="entity-id-suffix" style="${totalRotation ? `transform: rotate(${-totalRotation}deg)` : ''}">${this.getPanelDisplayName(entityId, panel.config)}</div>
-                      </div>
-                    </div>
-                  `;
-                }
-              )}
-            </div>
-          </div>
-        </div>
-      </ha-card>
-    `;
+    return htmlFromTpl(
+      cardRenderTpl,
+      this._renderTopControls(hasEnergy),
+      this._renderHistoryMeta(selectedDateTimeLabel),
+      this._renderCanvas(
+        size,
+        canvasRotation,
+        bgImage,
+        bgOpacity,
+        wrapperWidth,
+        wrapperHeight,
+        liveInteractionEnabled,
+        panX,
+        panY,
+        combinedScale
+      )
+    );
   }
 
-  static styles = css`
-    ha-card {
-      height: 100%;
-      width: 100%;
-      position: relative;
-    }
+  private static readonly CARD_STYLES = css`${unsafeCSS(cardStyles)}`;
 
-    .card-content {
-      padding: 16px;
-      overflow: auto;
-      position: relative;
-    }
-
-    .top-controls {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      background: var(--card-background-color, var(--ha-card-background, #fff));
-      padding-bottom: 8px;
-      margin-bottom: 6px;
-    }
-
-    .history-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      min-width: 240px;
-      flex: 1;
-    }
-
-    .history-label {
-      font-size: 12px;
-      color: var(--secondary-text-color, #666);
-      font-weight: 500;
-    }
-
-    .history-date-input {
-      min-width: 130px;
-      padding: 4px 8px;
-      border-radius: 8px;
-      border: 1px solid var(--divider-color, #d0d0d0);
-      background: var(--card-background-color, var(--ha-card-background, #fff));
-      color: var(--primary-text-color, #222);
-      font-size: 12px;
-    }
-
-    .history-day-btn {
-      width: 28px;
-      height: 28px;
-      border: 1px solid var(--divider-color, #d0d0d0);
-      border-radius: 50%;
-      background: var(--card-background-color, var(--ha-card-background, #fff));
-      color: var(--primary-text-color, #222);
-      font-size: 18px;
-      line-height: 1;
-      padding: 0;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 auto;
-    }
-
-    .history-day-btn:hover {
-      border-color: var(--primary-color, #03a9f4);
-      color: var(--primary-color, #03a9f4);
-    }
-
-    .history-time-slider {
-      width: min(280px, 48vw);
-      min-width: 140px;
-      accent-color: var(--primary-color, #03a9f4);
-      cursor: pointer;
-    }
-
-    .history-time-value {
-      min-width: 42px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--primary-text-color, #333);
-      text-align: right;
-    }
-
-    .history-now-btn {
-      border: 1px solid var(--divider-color, #d0d0d0);
-      border-radius: 12px;
-      background: var(--card-background-color, var(--ha-card-background, #fff));
-      color: var(--primary-text-color, #222);
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1;
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-
-    .history-now-btn:hover {
-      border-color: var(--primary-color, #03a9f4);
-      color: var(--primary-color, #03a9f4);
-    }
-
-    .history-meta {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 12px;
-      margin-bottom: 8px;
-      color: var(--secondary-text-color, #666);
-    }
-
-    .history-status {
-      font-weight: 600;
-      color: var(--primary-color, #03a9f4);
-    }
-
-    .history-error {
-      margin-bottom: 8px;
-      font-size: 12px;
-      color: #d32f2f;
-    }
-
-    .canvas-wrapper {
-      position: relative;
-      margin: 0 auto;
-      overflow: hidden;
-    }
-
-    .canvas-wrapper.interactive {
-      touch-action: none;
-      cursor: grab;
-    }
-
-    .canvas-wrapper.interactive:active {
-      cursor: grabbing;
-    }
-
-    .solar-grid-container {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      background: transparent;
-      border: 1px solid var(--divider-color);
-      cursor: default;
-      user-select: none;
-      transform-origin: center center;
-    }
-
-    .background-image {
-      position: absolute;
-      top: 0;
-      left: 0;
-      object-fit: none;
-      object-position: top left;
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    .view-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--card-background-color, var(--ha-card-background, #fff));
-      border: 1px solid var(--divider-color, #e0e0e0);
-      border-radius: 20px;
-      padding: 4px 10px;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
-
-    .view-toggle:hover {
-      border-color: var(--primary-color, #03a9f4);
-    }
-
-    .toggle-label {
-      font-size: 11px;
-      font-weight: 400;
-      color: var(--secondary-text-color, #888);
-      transition: color 0.2s, font-weight 0.2s;
-    }
-
-    .toggle-label.active {
-      font-weight: 700;
-      color: var(--primary-text-color, #333);
-    }
-
-    .toggle-track {
-      position: relative;
-      width: 32px;
-      height: 16px;
-      border-radius: 8px;
-      background: var(--disabled-color, #bdbdbd);
-      transition: background 0.25s;
-    }
-
-    .toggle-track.on {
-      background: var(--primary-color, #03a9f4);
-    }
-
-    .toggle-thumb {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-      transition: left 0.25s;
-    }
-
-    .toggle-track.on .toggle-thumb {
-      left: 18px;
-    }
-
-    /* show grab cursor when inside editor preview */
-    
-
-    .solar-panel {
-      position: absolute;
-      cursor: pointer;
-      transition: box-shadow 0.2s;
-      border-radius: 0;
-      overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      pointer-events: auto;
-      transform-origin: center center;
-    }
-
-    
-
-    .solar-panel:hover {
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    }
-
-    .panel-background {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      top: 0;
-      left: 0;
-      z-index: 0;
-      transition: background-color 0.3s ease;
-    }
-
-    .panel-image {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      object-position: center;
-      z-index: 1;
-      opacity: 0.9;
-    }
-
-    .panel-overlay {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 2;
-    }
-
-    .panel-value {
-      background: rgba(0, 0, 0, 0.6);
-      color: white;
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: bold;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-    }
-
-    .value {
-      font-size: 14px;
-    }
-
-    .unit {
-      font-size: 10px;
-      opacity: 0.8;
-    }
-
-    .entity-id-suffix {
-      position: absolute;
-      bottom: 4px;
-      right: 4px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      font-size: 9px;
-      padding: 2px 6px;
-      border-radius: 3px;
-    }
-
-    .error {
-      color: #ff6b6b;
-    }
-  `;
+  static styles = SolarPanelGridCard.CARD_STYLES;
 }
 
 // Register the custom element
