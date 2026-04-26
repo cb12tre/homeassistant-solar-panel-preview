@@ -1,4 +1,16 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, css, unsafeCSS } from 'lit';
+import { htmlFromTpl } from './template-utils';
+import editorStyles from './templates/solar-panel-grid-card-editor.css';
+import editorLoadingTpl from './templates/solar-panel-grid-card-editor-loading.tpl';
+import editorRenderTpl from './templates/solar-panel-grid-card-editor-render.tpl';
+import editorPanelsFormTpl from './templates/solar-panel-grid-card-editor-panels-form.tpl';
+import editorNoPanelsTpl from './templates/solar-panel-grid-card-editor-no-panels.tpl';
+import editorPanelItemTpl from './templates/solar-panel-grid-card-editor-panel-item.tpl';
+import editorPanelContentTpl from './templates/solar-panel-grid-card-editor-panel-content.tpl';
+import editorEntityOptionTpl from './templates/solar-panel-grid-card-editor-entity-option.tpl';
+import editorPositionsSummaryTpl from './templates/solar-panel-grid-card-editor-positions-summary.tpl';
+import editorPositionItemTpl from './templates/solar-panel-grid-card-editor-position-item.tpl';
+import editorPositionsEmptyTpl from './templates/solar-panel-grid-card-editor-positions-empty.tpl';
 
 interface SolarPanelConfig {
   entity: string;
@@ -74,154 +86,85 @@ export class SolarPanelGridCardEditor extends LitElement {
 
   protected render() {
     if (!this.hass || !this.config) {
-      return html`<p>Loading...</p>`;
+      return htmlFromTpl(editorLoadingTpl);
     }
 
-    return html`
-      <div class="card-config">
-        <h2>Grid Settings</h2>
-        <ha-form
-          .hass="${this.hass}"
-          .data="${this.config}"
-          .schema="${this._getGridSchema()}"
-          .computeLabel="${this._computeLabel}"
-          @value-changed="${this._onGridConfigChanged}"
-        ></ha-form>
-        
-        <h2>Panel Entities</h2>
-        <div class="panels-config">
-          <p>Configure sensor entities for each panel:</p>
-          ${this.config.panels && this.config.panels.length > 0
-            ? html`
-                <div class="panels-form">
-                  ${this.config.panels.map((panel: any, idx: number) => {
-                    const isExpanded = this._expandedPanels.has(idx);
-                    return html`
-                      <div class="panel-config-item ${isExpanded ? 'expanded' : ''}">
-                        <div class="panel-header" @click="${() => this._togglePanelExpanded(idx)}">
-                          <div class="panel-header-content">
-                            <span class="panel-toggle-icon">${isExpanded ? '▼' : '▶'}</span>
-                            <span class="panel-entity-name">${panel.name || panel.entity || 'Unnamed Panel'}</span>
-                          </div>
-                        </div>
-                        ${isExpanded ? html`
-                          <div class="panel-content">
-                            <div class="config-row">
-                              <label>Name:</label>
-                              <ha-textfield
-                                .value="${panel.name || ''}"
-                                data-config-value="name"
-                                data-index="${idx}"
-                                @input="${this._onPanelPropertyChanged}"
-                              ></ha-textfield>
-                            </div>
-                            <div class="config-row">
-                              <label for="entity-${idx}">Power Entity:</label>
-                              <select
-                                id="entity-${idx}"
-                                .value="${panel.entity || ''}"
-                                data-config-value="entity"
-                                data-index="${idx}"
-                                @change="${this._onPanelEntityChanged}"
-                                class="entity-select"
-                              >
-                                <option value="">Select a power sensor...</option>
-                                ${this._getPowerSensorEntities().map((entityId: string) =>
-                                  html`<option value="${entityId}" ?selected="${entityId === panel.entity}">${entityId}</option>`
-                                )}
-                              </select>
-                            </div>
-                            <div class="config-row">
-                              <label for="entity-energy-${idx}">Energy Entity:</label>
-                              <select
-                                id="entity-energy-${idx}"
-                                .value="${panel.entity_energy || ''}"
-                                data-config-value="entity_energy"
-                                data-index="${idx}"
-                                @change="${this._onPanelEntityChanged}"
-                                class="entity-select"
-                              >
-                                <option value="">Select an energy sensor...</option>
-                                ${this._getEnergySensorEntities().map((entityId: string) =>
-                                  html`<option value="${entityId}" ?selected="${entityId === panel.entity_energy}">${entityId}</option>`
-                                )}
-                              </select>
-                            </div>
-                            <div class="config-row">
-                              <label>Rotation (\u00b0):</label>
-                              <div class="slider-row">
-                                <input
-                                  type="range"
-                                  min="-180"
-                                  max="180"
-                                  step="5"
-                                  .value="${String(panel.rotation || 0)}"
-                                  data-config-value="rotation"
-                                  data-index="${idx}"
-                                  @input="${this._onPanelPropertyChanged}"
-                                  class="rotation-slider"
-                                />
-                                <span class="slider-value">${panel.rotation || 0}°</span>
-                              </div>
-                            </div>
-                            <div class="config-row">
-                              <label>Max Production (W):</label>
-                              <ha-textfield
-                                type="number"
-                                .value="${panel.max_production || 400}"
-                                data-config-value="max_production"
-                                data-index="${idx}"
-                                @input="${this._onPanelPropertyChanged}"
-                              ></ha-textfield>
-                            </div>
-                            <div class="config-row">
-                              <label>Max Daily Production (kWh):</label>
-                              <ha-textfield
-                                type="number"
-                                .value="${panel.max_daily_production || 5.5}"
-                                data-config-value="max_daily_production"
-                                data-index="${idx}"
-                                @input="${this._onPanelPropertyChanged}"
-                              ></ha-textfield>
-                            </div>
-                            <div class="config-row">
-                              <ha-button @click="${() => this._removePanel(idx)}" class="delete-btn">
-                                Delete Panel
-                              </ha-button>
-                            </div>
-                          </div>
-                        ` : ''}
-                      </div>
-                    `;
-                  })}
-                </div>
-              `
-            : html`<p class="no-panels">No panels configured. Edit the YAML to add panels.</p>`}
-        </div>
+    return htmlFromTpl(
+      editorRenderTpl,
+      this.hass,
+      this.config,
+      this._getGridSchema(),
+      this._computeLabel,
+      this._onGridConfigChanged,
+      this._renderPanelEntitiesSection(),
+      this._addPanel,
+      this._renderPositionsSummary()
+    );
+  }
 
-        <h2>Add Panel</h2>
-        <div class="panels-config">
-          <ha-button @click="${this._addPanel}">Add Panel</ha-button>
-        </div>
+  private _renderPanelEntitiesSection() {
+    if (!this.config.panels || this.config.panels.length === 0) {
+      return htmlFromTpl(editorNoPanelsTpl);
+    }
 
-        <h2>Panel Positions</h2>
-        <div class="panels-info">
-          <p>Drag panels in the card preview - positions update automatically!</p>
-          <div class="panels-list">
-            <p><strong>Current panels (${this.config.panels?.length || 0}):</strong></p>
-            ${this.config.panels && this.config.panels.length > 0
-              ? this.config.panels.map((panel: any) => html`
-                  <div class="panel-item">
-                    <span>${panel.name || panel.entity}</span>
-                    <span class="position"> @ (${panel.x}, ${panel.y})${panel.rotation ? ` ↻${panel.rotation}°` : ''}</span>
-                  </div>
-                `)
-              : html`<p class="no-panels">No panels configured</p>`}
-          </div>
-          <p class="yaml-note">Positions sync automatically as you drag in the preview!</p>
-        </div>
-      </div>
-    `;
+    const panelItems = this.config.panels.map((panel: SolarPanelConfig, idx: number) =>
+      this._renderPanelConfigItem(panel, idx)
+    );
+    return htmlFromTpl(editorPanelsFormTpl, panelItems);
+  }
+
+  private _renderPanelConfigItem(panel: SolarPanelConfig, idx: number) {
+    const isExpanded = this._expandedPanels.has(idx);
+    const expandedContent = isExpanded ? this._renderPanelConfigContent(panel, idx) : '';
+    return htmlFromTpl(
+      editorPanelItemTpl,
+      `panel-config-item ${isExpanded ? 'expanded' : ''}`.trim(),
+      () => this._togglePanelExpanded(idx),
+      isExpanded ? '▼' : '▶',
+      panel.name || panel.entity || 'Unnamed Panel',
+      expandedContent
+    );
+  }
+
+  private _renderPanelConfigContent(panel: SolarPanelConfig, idx: number) {
+    const powerOptions = this._getPowerSensorEntities().map((entityId: string) =>
+      htmlFromTpl(editorEntityOptionTpl, entityId, entityId === panel.entity, entityId)
+    );
+    const energyOptions = this._getEnergySensorEntities().map((entityId: string) =>
+      htmlFromTpl(editorEntityOptionTpl, entityId, entityId === panel.entity_energy, entityId)
+    );
+
+    return htmlFromTpl(
+      editorPanelContentTpl,
+      panel.name || '',
+      String(idx),
+      this._onPanelPropertyChanged,
+      `entity-${idx}`,
+      panel.entity || '',
+      this._onPanelEntityChanged,
+      powerOptions,
+      `entity-energy-${idx}`,
+      panel.entity_energy || '',
+      energyOptions,
+      String(panel.rotation || 0),
+      panel.rotation || 0,
+      panel.max_production || 400,
+      panel.max_daily_production || 5.5,
+      () => this._removePanel(idx)
+    );
+  }
+
+  private _renderPositionsSummary() {
+    if (!this.config.panels || this.config.panels.length === 0) {
+      return htmlFromTpl(editorPositionsEmptyTpl);
+    }
+
+    const positions = this.config.panels.map((panel: SolarPanelConfig) => {
+      const positionText = ` @ (${panel.x}, ${panel.y})${panel.rotation ? ` ↻${panel.rotation}°` : ''}`;
+      return htmlFromTpl(editorPositionItemTpl, panel.name || panel.entity, positionText);
+    });
+
+    return htmlFromTpl(editorPositionsSummaryTpl, this.config.panels.length, positions);
   }
 
   private _getGridSchema() {
@@ -528,207 +471,7 @@ export class SolarPanelGridCardEditor extends LitElement {
     // panel added (debug removed)
   }
 
-  static get styles() {
-    return css`
-      :host {
-        display: block;
-      }
-      .card-config {
-        padding: 16px;
-      }
-      h2 {
-        margin: 16px 0 8px 0;
-        font-size: 16px;
-        font-weight: 500;
-      }
-      .panels-info {
-        background: var(--secondary-background-color);
-        padding: 12px;
-        border-radius: 4px;
-        margin-top: 8px;
-      }
-      .panels-info p {
-        margin: 8px 0;
-        font-size: 14px;
-      }
-      .panels-config {
-        background: var(--secondary-background-color);
-        padding: 12px;
-        border-radius: 4px;
-        margin-top: 8px;
-      }
-      .panels-config p {
-        margin: 8px 0;
-        font-size: 13px;
-      }
-      .panels-form {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        margin-top: 12px;
-      }
-      .panel-config-item {
-        background: var(--primary-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        overflow: hidden;
-      }
-      .panel-header {
-        padding: 12px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-left: 3px solid var(--primary-color);
-        user-select: none;
-        transition: background-color 0.2s;
-      }
-      .panel-header:hover {
-        background-color: var(--secondary-background-color);
-      }
-      .panel-header-content {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex: 1;
-      }
-      .panel-toggle-icon {
-        font-size: 14px;
-        width: 20px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--primary-color);
-      }
-      .panel-entity-name {
-        font-weight: 500;
-        color: var(--primary-text-color);
-      }
-      .panel-content {
-        padding: 12px;
-        border-top: 1px solid var(--divider-color);
-        background-color: var(--secondary-background-color);
-      }
-      .config-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 8px 0;
-      }
-      .config-row label {
-        min-width: 150px;
-        font-size: 13px;
-        font-weight: 500;
-      }
-      .config-row ha-entity-picker {
-        flex: 1;
-      }
-      .config-row ha-textfield {
-        flex: 1;
-        max-width: 150px;
-      }
-      .slider-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 1;
-      }
-      .rotation-slider {
-        flex: 1;
-        -webkit-appearance: none;
-        appearance: none;
-        height: 6px;
-        border-radius: 3px;
-        background: var(--disabled-color, #bdbdbd);
-        outline: none;
-        cursor: pointer;
-      }
-      .rotation-slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--primary-color, #03a9f4);
-        cursor: pointer;
-      }
-      .rotation-slider::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--primary-color, #03a9f4);
-        border: none;
-        cursor: pointer;
-      }
-      .slider-value {
-        min-width: 40px;
-        text-align: right;
-        font-size: 12px;
-        color: var(--primary-text-color);
-      }
-      .entity-select {
-        flex: 1;
-        padding: 8px 12px;
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        background-color: var(--primary-background-color);
-        color: var(--primary-text-color);
-        font-size: 14px;
-        font-family: inherit;
-        cursor: pointer;
-      }
-      .entity-select:focus {
-        outline: none;
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
-      }
-      .entity-select option {
-        background-color: var(--secondary-background-color);
-        color: var(--primary-text-color);
-      }
-      .delete-btn {
-        margin-top: 8px;
-      }
-      ha-button {
-        display: block;
-        margin: 12px 0;
-      }
-      .yaml-note {
-        margin-top: 12px;
-        font-size: 12px;
-        font-style: italic;
-        color: var(--secondary-text-color);
-      }
-      .panels-list {
-        margin-top: 12px;
-        padding: 8px 0;
-      }
-      .panels-list > p {
-        margin: 8px 0;
-        font-size: 13px;
-      }
-      .panel-item {
-        padding: 8px 8px;
-        margin: 4px 0;
-        font-size: 12px;
-        background: var(--primary-background-color);
-        border-left: 2px solid var(--primary-color);
-        border-radius: 2px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .position {
-        color: var(--secondary-text-color);
-        font-size: 11px;
-        margin-left: 8px;
-      }
-      .no-panels {
-        font-style: italic;
-        color: var(--secondary-text-color);
-      }
-    `;
-  }
+  static styles = css`${unsafeCSS(editorStyles)}`;
 }
 
 // Register the custom element
