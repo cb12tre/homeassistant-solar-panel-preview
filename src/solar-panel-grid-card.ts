@@ -37,6 +37,13 @@ interface SolarPanelGridCardConfig {
   background_image?: string;
   background_opacity?: number;
   persist_view_state?: boolean; // persist W/kWh toggle state in localStorage
+  show_secondary?: boolean; // show the non-active unit value under the primary one
+  show_name?: boolean; // show panel display name badge
+  font_size_primary?: number;
+  font_size_secondary?: number;
+  font_size_unit?: number;
+  power_decimals?: number;
+  energy_decimals?: number;
 }
 
 // default values used throughout the card
@@ -60,6 +67,9 @@ interface Hass {
   states: Record<string, HassEntity>;
   callService: (domain: string, service: string, data?: any) => Promise<void>;
   callApi?: <T = any>(method: string, path: string, parameters?: Record<string, any>) => Promise<T>;
+  locale?: {
+    language?: string;
+  };
 }
 
 // Helper function to convert HSL to RGB
@@ -255,7 +265,7 @@ export class SolarPanelGridCard extends LitElement {
   }
 
   private _loadViewState(): boolean {
-    if (!this.config?.persist_view_state) {
+    if (this.config?.persist_view_state === false) {
       return false;
     }
 
@@ -267,7 +277,7 @@ export class SolarPanelGridCard extends LitElement {
   }
 
   private _saveViewState(value: boolean): void {
-    if (!this.config?.persist_view_state) {
+    if (this.config?.persist_view_state === false) {
       return;
     }
 
@@ -278,10 +288,29 @@ export class SolarPanelGridCard extends LitElement {
     }
   }
 
+  private _clearViewState(): void {
+    try {
+      localStorage.removeItem(SolarPanelGridCard.VIEW_STATE_STORAGE_KEY);
+    } catch {
+      // Ignore localStorage errors (e.g. private mode / restricted browser context)
+    }
+  }
+
   update(changedProperties: Map<string | number | symbol, unknown>) {
     super.update(changedProperties);
 
     if (changedProperties.has('config')) {
+      const previousConfig = changedProperties.get('config') as SolarPanelGridCardConfig | undefined;
+      const persistChanged = previousConfig?.persist_view_state !== this.config?.persist_view_state;
+      if (persistChanged) {
+        if (this.config?.persist_view_state === false) {
+          this._showEnergy = false;
+          this._clearViewState();
+        } else {
+          this._showEnergy = this._loadViewState();
+        }
+      }
+
       // rebuild panels map whenever config changes
       this.panels.clear();
       if (this.config?.panels) {
@@ -524,6 +553,19 @@ export class SolarPanelGridCard extends LitElement {
     return isNaN(value) ? 0 : value;
   }
 
+  private getDecimalsForEntity(entity: HassEntity | undefined): number {
+    const unit = entity?.attributes?.unit_of_measurement || '';
+    const raw = (unit === 'kWh' || unit === 'Wh')
+      ? this.config.energy_decimals
+      : this.config.power_decimals;
+    const defaultValue = (unit === 'kWh' || unit === 'Wh') ? 2 : 0;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      return defaultValue;
+    }
+    return Math.max(0, Math.min(6, Math.round(parsed)));
+  }
+
   private getMaxValue(panelConfig: SolarPanelConfig, unit: string): number {
     if (unit === 'kWh' || unit === 'Wh') {
       const maxDaily = panelConfig.max_daily_production || 5.5;
@@ -647,6 +689,11 @@ export class SolarPanelGridCard extends LitElement {
       return;
     }
     if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.solar-panel')) {
       return;
     }
 
@@ -1134,10 +1181,14 @@ export class SolarPanelGridCard extends LitElement {
     const activeEntityId = (this._showEnergy && panel.config.entity_energy)
       ? panel.config.entity_energy
       : entityId;
+    const secondaryEntityId = (this._showEnergy && panel.config.entity_energy)
+      ? entityId
+      : panel.config.entity_energy;
     const activeEntity = this._getDisplayEntity(activeEntityId);
+    const secondaryEntity = secondaryEntityId ? this._getDisplayEntity(secondaryEntityId) : undefined;
+    const showSecondary = this.config.show_secondary === true;
     const panelStyle = `left: ${panel.config.x}px; top: ${panel.config.y}px; width: ${this.panelWidth}px; height: ${this.panelHeight}px;${rotation ? ` transform: rotate(${rotation}deg);` : ''}`;
     const panelValueStyle = totalRotation ? `transform: rotate(${-totalRotation}deg)` : '';
-    const entitySuffixStyle = totalRotation ? `transform: rotate(${-totalRotation}deg)` : '';
     const backgroundColor = this.getProductionColor(
       this.getProductionValue(activeEntity),
       this.getMaxValue(
@@ -1145,13 +1196,30 @@ export class SolarPanelGridCard extends LitElement {
         activeEntity?.attributes.unit_of_measurement || 'W'
       )
     );
-    const panelValueMarkup = activeEntity
+    const primaryPanelValueMarkup = activeEntity
       ? htmlFromTpl(
           cardPanelValueTpl,
-          this.getProductionValue(activeEntity).toFixed(1),
-          activeEntity.attributes.unit_of_measurement || ''
+          this.getProductionValue(activeEntity).toLocaleString(this.hass?.locale?.language || undefined, {
+            minimumFractionDigits: this.getDecimalsForEntity(activeEntity),
+            maximumFractionDigits: this.getDecimalsForEntity(activeEntity),
+          }),
+          activeEntity.attributes.unit_of_measurement || '',
+          'primary'
         )
       : htmlFromTpl(cardPanelErrorTpl);
+    const secondaryPanelValueMarkup = showSecondary && secondaryEntity
+      ? htmlFromTpl(
+          cardPanelValueTpl,
+          this.getProductionValue(secondaryEntity).toLocaleString(this.hass?.locale?.language || undefined, {
+            minimumFractionDigits: this.getDecimalsForEntity(secondaryEntity),
+            maximumFractionDigits: this.getDecimalsForEntity(secondaryEntity),
+          }),
+          secondaryEntity.attributes.unit_of_measurement || '',
+          'secondary'
+        )
+      : '';
+    const panelDisplayName = this.config.show_name === false ? '' : this.getPanelDisplayName(entityId, panel.config);
+    const panelNameMarkup = panelDisplayName ? htmlFromTpl('<div class="panel-name">{{0}}</div>', panelDisplayName) : '';
 
     return htmlFromTpl(
       cardPanelTpl,
@@ -1161,9 +1229,8 @@ export class SolarPanelGridCard extends LitElement {
       backgroundColor,
       this.panelImage,
       panelValueStyle,
-      panelValueMarkup,
-      entitySuffixStyle,
-      this.getPanelDisplayName(entityId, panel.config)
+      panelNameMarkup,
+      [primaryPanelValueMarkup, secondaryPanelValueMarkup]
     );
   }
 
@@ -1204,7 +1271,10 @@ export class SolarPanelGridCard extends LitElement {
       combinedScale,
       rotationStyle,
       backgroundMarkup,
-      panelMarkup
+      panelMarkup,
+      this.config.font_size_primary ?? 14,
+      this.config.font_size_secondary ?? 12,
+      this.config.font_size_unit ?? 10
     );
   }
 
