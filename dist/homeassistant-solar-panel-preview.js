@@ -68,7 +68,7 @@
         return x(compiled.strings, ...orderedValues);
     }
 
-    var cardStyles = "ha-card {\r\n  height: 100%;\r\n  width: 100%;\r\n  position: relative;\r\n}\r\n\r\n.card-content {\r\n  padding: 16px;\r\n  overflow: auto;\r\n  position: relative;\r\n}\r\n\r\n.top-controls {\r\n  position: sticky;\r\n  top: 0;\r\n  z-index: 10;\r\n  display: flex;\r\n  justify-content: space-between;\r\n  align-items: center;\r\n  gap: 10px;\r\n  flex-wrap: wrap;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  padding-bottom: 8px;\r\n  margin-bottom: 6px;\r\n}\r\n\r\n.history-controls {\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 8px;\r\n  flex-wrap: wrap;\r\n  min-width: 240px;\r\n  flex: 1;\r\n}\r\n\r\n.history-label {\r\n  font-size: 12px;\r\n  color: var(--secondary-text-color, #666);\r\n  font-weight: 500;\r\n}\r\n\r\n.history-date-input {\r\n  min-width: 130px;\r\n  padding: 4px 8px;\r\n  border-radius: 8px;\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 12px;\r\n}\r\n\r\n.history-day-btn {\r\n  width: 28px;\r\n  height: 28px;\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  border-radius: 50%;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 18px;\r\n  line-height: 1;\r\n  padding: 0;\r\n  cursor: pointer;\r\n  display: inline-flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  flex: 0 0 auto;\r\n}\r\n\r\n.history-day-btn:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n  color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.history-time-slider {\r\n  width: min(280px, 48vw);\r\n  min-width: 140px;\r\n  accent-color: var(--primary-color, #03a9f4);\r\n  cursor: pointer;\r\n}\r\n\r\n.history-time-value {\r\n  min-width: 42px;\r\n  font-size: 12px;\r\n  font-weight: 600;\r\n  color: var(--primary-text-color, #333);\r\n  text-align: right;\r\n}\r\n\r\n.history-now-btn {\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  border-radius: 12px;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 11px;\r\n  font-weight: 600;\r\n  line-height: 1;\r\n  padding: 6px 10px;\r\n  cursor: pointer;\r\n}\r\n\r\n.history-now-btn:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n  color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.history-meta {\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 10px;\r\n  font-size: 12px;\r\n  margin-bottom: 8px;\r\n  color: var(--secondary-text-color, #666);\r\n}\r\n\r\n.history-status {\r\n  font-weight: 600;\r\n  color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.history-error {\r\n  margin-bottom: 8px;\r\n  font-size: 12px;\r\n  color: #d32f2f;\r\n}\r\n\r\n.canvas-wrapper {\r\n  position: relative;\r\n  margin: 0 auto;\r\n  overflow: hidden;\r\n}\r\n\r\n.canvas-wrapper.interactive {\r\n  touch-action: none;\r\n  cursor: grab;\r\n}\r\n\r\n.canvas-wrapper.interactive:active {\r\n  cursor: grabbing;\r\n}\r\n\r\n.solar-grid-container {\r\n  position: absolute;\r\n  top: 50%;\r\n  left: 50%;\r\n  background: transparent;\r\n  border: 1px solid var(--divider-color);\r\n  cursor: default;\r\n  user-select: none;\r\n  transform-origin: center center;\r\n}\r\n\r\n.background-image {\r\n  position: absolute;\r\n  top: 0;\r\n  left: 0;\r\n  object-fit: none;\r\n  object-position: top left;\r\n  z-index: 0;\r\n  pointer-events: none;\r\n}\r\n\r\n.view-toggle {\r\n  display: inline-flex;\r\n  align-items: center;\r\n  gap: 6px;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  border: 1px solid var(--divider-color, #e0e0e0);\r\n  border-radius: 20px;\r\n  padding: 4px 10px;\r\n  cursor: pointer;\r\n  user-select: none;\r\n  white-space: nowrap;\r\n}\r\n\r\n.view-toggle:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.toggle-label {\r\n  font-size: 11px;\r\n  font-weight: 400;\r\n  color: var(--secondary-text-color, #888);\r\n  transition: color 0.2s, font-weight 0.2s;\r\n}\r\n\r\n.toggle-label.active {\r\n  font-weight: 700;\r\n  color: var(--primary-text-color, #333);\r\n}\r\n\r\n.toggle-track {\r\n  position: relative;\r\n  width: 32px;\r\n  height: 16px;\r\n  border-radius: 8px;\r\n  background: var(--disabled-color, #bdbdbd);\r\n  transition: background 0.25s;\r\n}\r\n\r\n.toggle-track.on {\r\n  background: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.toggle-thumb {\r\n  position: absolute;\r\n  top: 2px;\r\n  left: 2px;\r\n  width: 12px;\r\n  height: 12px;\r\n  border-radius: 50%;\r\n  background: white;\r\n  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);\r\n  transition: left 0.25s;\r\n}\r\n\r\n.toggle-track.on .toggle-thumb {\r\n  left: 18px;\r\n}\r\n\r\n.solar-panel {\r\n  position: absolute;\r\n  cursor: pointer;\r\n  transition: box-shadow 0.2s;\r\n  border-radius: 0;\r\n  overflow: hidden;\r\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\r\n  pointer-events: auto;\r\n  transform-origin: center center;\r\n}\r\n\r\n.solar-panel:hover {\r\n  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);\r\n}\r\n\r\n.panel-background {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  top: 0;\r\n  left: 0;\r\n  z-index: 0;\r\n  transition: background-color 0.3s ease;\r\n}\r\n\r\n.panel-image {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  object-fit: contain;\r\n  object-position: center;\r\n  z-index: 1;\r\n  opacity: 0.9;\r\n}\r\n\r\n.panel-overlay {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  z-index: 2;\r\n}\r\n\r\n.panel-value {\n  background: rgba(0, 0, 0, 0.6);\n  color: white;\n  padding: 4px 6px;\n  border-radius: 3px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  white-space: nowrap;\n}\n\n.entity-value {\n  display: flex;\n  flex-direction: row;\n  align-items: baseline;\n  gap: 3px;\n  line-height: 1.1;\n}\n\n.value {\n  font-weight: bold;\n}\n\n.value.primary {\n  font-size: var(--font-size-primary, 14px);\n}\n\n.value.secondary {\n  font-size: var(--font-size-secondary, 12px);\n  font-weight: normal;\n}\n\n.unit {\n  font-size: var(--font-size-unit, 10px);\n  font-weight: normal;\n  opacity: 0.8;\n}\n\n.panel-name {\n  font-size: 10px;\n  opacity: 0.9;\n  font-weight: normal;\n  letter-spacing: 0.5px;\n  margin-bottom: 0;\n  width: 100%;\n  text-align: center;\n  line-height: 1;\n}\n\r\n.error {\r\n  color: #ff6b6b;\r\n}\r\n";
+    var cardStyles = "ha-card {\r\n  height: 100%;\r\n  width: 100%;\r\n  position: relative;\r\n}\r\n\r\n.card-content {\r\n  padding: 16px;\r\n  overflow: auto;\r\n  position: relative;\r\n}\r\n\r\n.top-controls {\r\n  position: sticky;\r\n  top: 0;\r\n  z-index: 10;\r\n  display: flex;\r\n  justify-content: space-between;\r\n  align-items: center;\r\n  gap: 10px;\r\n  flex-wrap: wrap;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  padding-bottom: 8px;\r\n  margin-bottom: 6px;\r\n}\r\n\r\n.history-controls {\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 8px;\r\n  flex-wrap: wrap;\r\n  min-width: 240px;\r\n  flex: 1;\r\n}\r\n\r\n.history-label {\r\n  font-size: 12px;\r\n  color: var(--secondary-text-color, #666);\r\n  font-weight: 500;\r\n}\r\n\r\n.history-date-input {\r\n  min-width: 130px;\r\n  padding: 4px 8px;\r\n  border-radius: 8px;\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 12px;\r\n}\r\n\r\n.history-day-btn {\r\n  width: 28px;\r\n  height: 28px;\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  border-radius: 50%;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 18px;\r\n  line-height: 1;\r\n  padding: 0;\r\n  cursor: pointer;\r\n  display: inline-flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  flex: 0 0 auto;\r\n}\r\n\r\n.history-day-btn:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n  color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.history-time-slider {\r\n  width: min(280px, 48vw);\r\n  min-width: 140px;\r\n  accent-color: var(--primary-color, #03a9f4);\r\n  cursor: pointer;\r\n}\r\n\r\n.history-time-value {\r\n  min-width: 42px;\r\n  font-size: 12px;\r\n  font-weight: 600;\r\n  color: var(--primary-text-color, #333);\r\n  text-align: right;\r\n}\r\n\r\n.history-now-btn {\r\n  border: 1px solid var(--divider-color, #d0d0d0);\r\n  border-radius: 12px;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  color: var(--primary-text-color, #222);\r\n  font-size: 11px;\r\n  font-weight: 600;\r\n  line-height: 1;\r\n  padding: 6px 10px;\r\n  cursor: pointer;\r\n}\r\n\r\n.history-now-btn:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n  color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.history-meta {\r\n  display: flex;\r\n  align-items: center;\r\n  gap: 10px;\r\n  font-size: 12px;\r\n  margin-bottom: 8px;\r\n  color: var(--secondary-text-color, #666);\r\n}\r\n\r\n.history-status {\n  font-weight: 600;\n  color: var(--primary-color, #03a9f4);\n}\n\n.history-energy-sync {\n  display: inline-flex;\n  align-items: center;\n  padding: 2px 8px;\n  border-radius: 999px;\n  border: 1px solid rgba(3, 169, 244, 0.45);\n  background: rgba(3, 169, 244, 0.1);\n  color: var(--primary-color, #03a9f4);\n  font-size: 11px;\n  font-weight: 600;\n  line-height: 1.2;\n}\n\r\n.history-error {\r\n  margin-bottom: 8px;\r\n  font-size: 12px;\r\n  color: #d32f2f;\r\n}\r\n\r\n.canvas-wrapper {\r\n  position: relative;\r\n  margin: 0 auto;\r\n  overflow: hidden;\r\n}\r\n\r\n.canvas-wrapper.interactive {\r\n  touch-action: none;\r\n  cursor: grab;\r\n}\r\n\r\n.canvas-wrapper.interactive:active {\r\n  cursor: grabbing;\r\n}\r\n\r\n.solar-grid-container {\r\n  position: absolute;\r\n  top: 50%;\r\n  left: 50%;\r\n  background: transparent;\r\n  border: 1px solid var(--divider-color);\r\n  cursor: default;\r\n  user-select: none;\r\n  transform-origin: center center;\r\n}\r\n\r\n.background-image {\r\n  position: absolute;\r\n  top: 0;\r\n  left: 0;\r\n  object-fit: none;\r\n  object-position: top left;\r\n  z-index: 0;\r\n  pointer-events: none;\r\n}\r\n\r\n.view-toggle {\r\n  display: inline-flex;\r\n  align-items: center;\r\n  gap: 6px;\r\n  background: var(--card-background-color, var(--ha-card-background, #fff));\r\n  border: 1px solid var(--divider-color, #e0e0e0);\r\n  border-radius: 20px;\r\n  padding: 4px 10px;\r\n  cursor: pointer;\r\n  user-select: none;\r\n  white-space: nowrap;\r\n}\r\n\r\n.view-toggle:hover {\r\n  border-color: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.toggle-label {\r\n  font-size: 11px;\r\n  font-weight: 400;\r\n  color: var(--secondary-text-color, #888);\r\n  transition: color 0.2s, font-weight 0.2s;\r\n}\r\n\r\n.toggle-label.active {\r\n  font-weight: 700;\r\n  color: var(--primary-text-color, #333);\r\n}\r\n\r\n.toggle-track {\r\n  position: relative;\r\n  width: 32px;\r\n  height: 16px;\r\n  border-radius: 8px;\r\n  background: var(--disabled-color, #bdbdbd);\r\n  transition: background 0.25s;\r\n}\r\n\r\n.toggle-track.on {\r\n  background: var(--primary-color, #03a9f4);\r\n}\r\n\r\n.toggle-thumb {\r\n  position: absolute;\r\n  top: 2px;\r\n  left: 2px;\r\n  width: 12px;\r\n  height: 12px;\r\n  border-radius: 50%;\r\n  background: white;\r\n  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);\r\n  transition: left 0.25s;\r\n}\r\n\r\n.toggle-track.on .toggle-thumb {\r\n  left: 18px;\r\n}\r\n\r\n.solar-panel {\r\n  position: absolute;\r\n  cursor: pointer;\r\n  transition: box-shadow 0.2s;\r\n  border-radius: 0;\r\n  overflow: hidden;\r\n  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\r\n  pointer-events: auto;\r\n  transform-origin: center center;\r\n}\r\n\r\n.solar-panel:hover {\r\n  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);\r\n}\r\n\r\n.panel-background {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  top: 0;\r\n  left: 0;\r\n  z-index: 0;\r\n  transition: background-color 0.3s ease;\r\n}\r\n\r\n.panel-image {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  object-fit: contain;\r\n  object-position: center;\r\n  z-index: 1;\r\n  opacity: 0.9;\r\n}\r\n\r\n.panel-overlay {\r\n  position: absolute;\r\n  width: 100%;\r\n  height: 100%;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  z-index: 2;\r\n}\r\n\r\n.panel-value {\n  background: rgba(0, 0, 0, 0.6);\n  color: white;\n  padding: 4px 6px;\n  border-radius: 3px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n  white-space: nowrap;\n}\n\n.entity-value {\n  display: flex;\n  flex-direction: row;\n  align-items: baseline;\n  gap: 3px;\n  line-height: 1.1;\n}\n\n.value {\n  font-weight: bold;\n}\n\n.value.primary {\n  font-size: var(--font-size-primary, 14px);\n}\n\n.value.secondary {\n  font-size: var(--font-size-secondary, 12px);\n  font-weight: normal;\n}\n\n.unit {\n  font-size: var(--font-size-unit, 10px);\n  font-weight: normal;\n  opacity: 0.8;\n}\n\n.panel-name {\n  font-size: 10px;\n  opacity: 0.9;\n  font-weight: normal;\n  letter-spacing: 0.5px;\n  margin-bottom: 0;\n  width: 100%;\n  text-align: center;\n  line-height: 1;\n}\n\r\n.error {\r\n  color: #ff6b6b;\r\n}\r\n";
 
     var cardRenderTpl = "<ha-card>\r\n  <div class=\"card-content\">\r\n    {{0}}\r\n    {{1}}\r\n    {{2}}\r\n  </div>\r\n</ha-card>\r\n";
 
@@ -76,7 +76,7 @@
 
     var cardEnergyToggleTpl = "<div class=\"view-toggle\" @click={{0}} title=\"Toggle between power and energy view\">\r\n  <span class={{1}}>W</span>\r\n  <div class={{2}}>\r\n    <div class=\"toggle-thumb\"></div>\r\n  </div>\r\n  <span class={{3}}>kWh</span>\r\n</div>\r\n";
 
-    var cardHistoryMetaTpl = "<div class=\"history-meta\">\r\n  <span>Snapshot: {{0}}</span>\r\n  {{1}}\r\n</div>\r\n{{2}}\r\n";
+    var cardHistoryMetaTpl = "<div class=\"history-meta\">\n  <span>Snapshot: {{0}}</span>\n  {{1}}\n  {{2}}\n</div>\n{{3}}\n";
 
     var cardHistoryStatusTpl = "<span class=\"history-status\">Loading...</span>\r\n";
 
@@ -160,6 +160,10 @@
             this._resizeObserver = undefined;
             this._historyStates = new Map();
             this._historyRequestToken = 0;
+            this._energyCollection = null;
+            this._unsubEnergy = null;
+            this._energyStats = {};
+            this._energyDays = 1;
             this._activePointers = new Map();
             this._isViewportPanning = false;
             this._panStartPoint = { x: 0, y: 0 };
@@ -489,6 +493,88 @@
                 // Ignore localStorage errors (e.g. private mode / restricted browser context)
             }
         }
+        _trySubscribeEnergy() {
+            if (!this.hass?.connection) {
+                return;
+            }
+            const conn = this.hass.connection;
+            const isCollection = (obj) => obj && typeof obj.subscribe === 'function';
+            let collection = null;
+            const panelKey = `_energy_${this.hass.panelUrl}`;
+            if (isCollection(conn[panelKey])) {
+                collection = conn[panelKey];
+            }
+            else if (isCollection(conn._energy)) {
+                collection = conn._energy;
+            }
+            else {
+                for (const key of Object.keys(conn)) {
+                    if (key.startsWith('_energy') && isCollection(conn[key])) {
+                        collection = conn[key];
+                        break;
+                    }
+                }
+            }
+            if (collection && collection !== this._energyCollection) {
+                if (this._unsubEnergy) {
+                    this._unsubEnergy();
+                }
+                this._energyCollection = collection;
+                this._unsubEnergy = collection.subscribe((data) => {
+                    void this._fetchStatistics(data);
+                });
+            }
+        }
+        async _fetchStatistics(energyData) {
+            if (!energyData?.start || !this.hass?.callWS) {
+                return;
+            }
+            const start = energyData.start;
+            const end = energyData.end || new Date();
+            let days = 1;
+            if (start && end) {
+                const diffTime = Math.abs(end.valueOf() - start.valueOf());
+                days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            }
+            this._energyDays = days;
+            const today = new Date();
+            const startIsToday = start.getDate() === today.getDate()
+                && start.getMonth() === today.getMonth()
+                && start.getFullYear() === today.getFullYear();
+            if (startIsToday && days <= 1) {
+                this._energyStats = {};
+                this.requestUpdate();
+                return;
+            }
+            const statisticIds = Array.from(this.panels.values())
+                .map((p) => p.config.entity_energy)
+                .filter((id) => !!id);
+            if (statisticIds.length === 0) {
+                return;
+            }
+            try {
+                const stats = await this.hass.callWS({
+                    type: 'recorder/statistics_during_period',
+                    start_time: start.toISOString(),
+                    end_time: end.toISOString(),
+                    statistic_ids: statisticIds,
+                    period: 'hour',
+                    types: ['change'],
+                });
+                const newStats = {};
+                for (const id of statisticIds) {
+                    const rows = stats?.[id];
+                    if (rows && Array.isArray(rows)) {
+                        newStats[id] = rows.reduce((sum, val) => sum + (val.change || 0), 0);
+                    }
+                }
+                this._energyStats = newStats;
+                this.requestUpdate();
+            }
+            catch (err) {
+                console.warn('[SolarPanelGridCard] Failed to fetch recorder statistics', err);
+            }
+        }
         update(changedProperties) {
             super.update(changedProperties);
             if (changedProperties.has('config')) {
@@ -514,8 +600,12 @@
                         });
                     });
                 }
+                this._trySubscribeEnergy();
             }
             if (changedProperties.has('hass') && this.hass) {
+                if (!this._energyCollection) {
+                    this._trySubscribeEnergy();
+                }
                 // Update just the entity references when hass updates
                 this.panels.forEach((panel, entity) => {
                     panel.entity = this.hass.states[entity];
@@ -541,6 +631,11 @@
         }
         disconnectedCallback() {
             super.disconnectedCallback();
+            if (this._unsubEnergy) {
+                this._unsubEnergy();
+                this._unsubEnergy = null;
+            }
+            this._energyCollection = null;
             if (this._resizeObserver) {
                 this._resizeObserver.disconnect();
             }
@@ -573,6 +668,17 @@
             if (!this._selectedDate)
                 return false;
             return this._selectedDate === this._toDateInputValue(new Date());
+        }
+        _isLiveSnapshotSelected() {
+            if (!this._isTodaySelected()) {
+                return false;
+            }
+            const now = new Date();
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            return Math.abs(this._selectedMinute - nowMinutes) <= 1;
+        }
+        _isEnergyDateSelectionActive() {
+            return this._isLiveSnapshotSelected() && !!this._energyCollection;
         }
         _getSelectedDateTime() {
             const [y, m, d] = this._selectedDate.split('-').map((n) => Number(n));
@@ -688,6 +794,9 @@
         getProductionValue(entity) {
             if (!entity)
                 return 0;
+            if (this._isLiveSnapshotSelected() && this._energyStats[entity.entity_id] !== undefined) {
+                return this._energyStats[entity.entity_id];
+            }
             const value = parseFloat(entity.state);
             return isNaN(value) ? 0 : value;
         }
@@ -706,8 +815,9 @@
         getMaxValue(panelConfig, unit) {
             if (unit === 'kWh' || unit === 'Wh') {
                 const maxDaily = panelConfig.max_daily_production || 5.5;
+                const periodMax = this._isLiveSnapshotSelected() ? maxDaily * (this._energyDays || 1) : maxDaily;
                 // If unit is Wh, convert max_daily_production from kWh to Wh
-                return unit === 'Wh' ? maxDaily * 1000 : maxDaily;
+                return unit === 'Wh' ? periodMax * 1000 : periodMax;
             }
             return panelConfig.max_production || 400;
         }
@@ -1040,7 +1150,10 @@
         _renderHistoryMeta(selectedDateTimeLabel) {
             const statusMarkup = this._historyLoading ? htmlFromTpl(cardHistoryStatusTpl) : '';
             const errorMarkup = this._historyError ? htmlFromTpl(cardHistoryErrorTpl, this._historyError) : '';
-            return htmlFromTpl(cardHistoryMetaTpl, selectedDateTimeLabel, statusMarkup, errorMarkup);
+            const energySyncMarkup = this._isEnergyDateSelectionActive()
+                ? htmlFromTpl('<span class="history-energy-sync">Synced with Energy date filter</span>')
+                : '';
+            return htmlFromTpl(cardHistoryMetaTpl, selectedDateTimeLabel, statusMarkup, energySyncMarkup, errorMarkup);
         }
         _renderPanel(entityId, panel, canvasRotation) {
             const rotation = panel.config.rotation || 0;
